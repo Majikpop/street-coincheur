@@ -110,7 +110,7 @@ let NET = null, LOCAL = null;
 /* ---------- État de l'interface ---------- */
 const S = {
   view: 'home', net: 'connecting', err: '', busy: false, name: LS.get('sc_name', ''),
-  tours: [], tour: null, tourId: null, results: [], tables: {},
+  tours: [], rooms: [], tour: null, tourId: null, results: [], tables: {},
   form: { name: '', tables: 2, perSet: 8 }, code: '',
   cur: null, doc: null, docLoaded: false,
   freeOpts: LS.get('sc_free', { target: 1000, moc: false }),
@@ -175,7 +175,7 @@ async function createRoom() {
   try {
     for (let k = 0; k < 6; k++) {
       const code = Array.from({ length: 4 }, () => A[Math.floor(Math.random() * A.length)]).join('');
-      if (await NET.create('rooms/' + code, T.initFree(code, S.freeOpts))) { S.busy = false; go('r=' + code); return; }
+      if (await NET.create('rooms/' + code, { ...T.initFree(code, S.freeOpts), createdAt: Date.now() })) { S.busy = false; go('r=' + code); return; }
     }
   } catch (e) { S.err = 'Création impossible (' + (e.code || e.message) + ').'; }
   S.busy = false; render();
@@ -186,6 +186,18 @@ async function createTournament() {
   S.busy = true; render();
   try { await NET.set('tournaments/' + id, tour); await NET.setMany(T.tourHands(tour, rnd() + rnd())); S.busy = false; go('t=' + id); }
   catch (e) { S.busy = false; S.err = 'Création impossible (' + (e.code || e.message) + ').'; render(); }
+}
+
+/* Tables de partie libre en ligne : une table est inactive après 2 h sans coup joué. */
+const IDLE_MS = 2 * 3600e3;
+const roomActivity = r => Math.max(r.at || 0, r.createdAt || 0);
+const roomIdle = r => Date.now() - roomActivity(r) > IDLE_MS;
+async function killRooms(codes) {
+  if (!codes.length) return;
+  S.busy = true; S.confirm = null; render();
+  try { for (const c of codes) await NET.removeTree('rooms/' + c); }
+  catch (e) { S.err = 'Fermeture impossible (' + (e.code || e.message) + ').'; }
+  S.busy = false; render();
 }
 
 /** Supprime un tournoi qui ne sera pas terminé : tables, résultats et tournoi. */
@@ -332,6 +344,7 @@ function viewHome() {
         <div class="row join"><input id="code" type="text" data-f="code" maxlength="4" placeholder="CODE" value="${esc(S.code)}" aria-label="Code de table" autocapitalize="characters"><button class="btn" data-a="joinCode">Rejoindre</button></div>` : ''}
         <button class="btn ${online ? 'ghost' : 'primary'} block" data-a="newLocal">Jouer sur ce téléphone</button>
       </div></section>
+    ${online && S.rooms.length ? roomsBlock() : ''}
     <section class="section">
       <div class="row between"><h2>Tournois duplicate</h2><button class="btn gold" data-a="go" data-h="new">Nouveau</button></div>
       ${S.tours.length ? `<div class="sheet list">${tours}</div>` : `<div class="sheet pad"><p class="muted small">Aucun tournoi. Créez-en un : toutes les tables jouent les mêmes donnes, et chaque paire est comparée à celles qui ont occupé la même position.</p></div>`}
@@ -339,6 +352,33 @@ function viewHome() {
     </section>
     ${rulesBlock()}
   </div>`;
+}
+
+function ago(t) {
+  if (!t) return 'jamais utilisée';
+  const m = Math.round((Date.now() - t) / 60e3);
+  if (m < 1) return "à l'instant";
+  if (m < 60) return `il y a ${m} min`;
+  if (m < 48 * 60) return `il y a ${Math.round(m / 60)} h`;
+  return `il y a ${Math.round(m / 1440)} j`;
+}
+function roomsBlock() {
+  const STATUS = { lobby: 'En attente', playing: 'Donne en cours', between: 'Entre deux donnes' };
+  const idle = S.rooms.filter(roomIdle);
+  const rows = S.rooms.map(r => {
+    const who = r.seats.filter(x => x.uid || x.bot).map(x => esc(x.name || 'IA')).join(', ') || 'Personne';
+    if (S.confirm === 'room:' + r.id) return `<div class="item kill-row"><span class="small"><b>Fermer la table ${esc(r.id)} ?</b> <span class="muted">Les joueurs encore dessus la perdront.</span></span>
+      <span class="row"><button class="btn danger sm" data-a="killRooms" data-c="${esc(r.id)}" ${S.busy ? 'disabled' : ''}>${S.busy ? '…' : 'Oui'}</button><button class="btn ghost sm" data-a="confirm" data-c="">Non</button></span></div>`;
+    return `<div class="item tour-row"><button class="tour-open" data-a="go" data-h="r=${esc(r.id)}">
+      <span class="stack" style="gap:2px"><b>Table ${esc(r.id)}${roomIdle(r) ? ' <span class="idle">inactive</span>' : ''}</b>
+      <span class="meta">${STATUS[r.status] || ''} · ${r.scores ? r.scores.join(' – ') : ''} · ${ago(roomActivity(r))}</span><span class="meta">${who}</span></span>
+      <span class="chev" aria-hidden="true">›</span></button><button class="btn danger sm" data-a="confirm" data-c="room:${esc(r.id)}" aria-label="Fermer la table ${esc(r.id)}">Kill</button></div>`;
+  }).join('');
+  const bulk = !idle.length ? '' : S.confirm === 'rooms:idle'
+    ? `<div class="row wrapr"><span class="small">Fermer les ${idle.length} tables inactives ?</span><button class="btn danger sm" data-a="killRooms" data-c="${idle.map(r => esc(r.id)).join(',')}" ${S.busy ? 'disabled' : ''}>${S.busy ? '…' : 'Oui'}</button><button class="btn ghost sm" data-a="confirm" data-c="">Non</button></div>`
+    : `<button class="btn danger sm" data-a="confirm" data-c="rooms:idle" style="align-self:flex-start">Kill les ${idle.length} inactive${idle.length > 1 ? 's' : ''}</button>`;
+  return `<section class="section"><h2>Tables en ligne</h2><div class="sheet list">${rows}</div>${bulk}
+    <p class="muted small">Inactive : aucun coup depuis 2 h.</p></section>`;
 }
 
 function freeOptions() {
@@ -674,6 +714,7 @@ $app.addEventListener('click', async e => {
     case 'step': { const lim = d.k === 'tables' ? [1, 12] : [1, 16]; S.form[d.k] = Math.min(lim[1], Math.max(lim[0], S.form[d.k] + +d.d)); render(); break; }
     case 'createTour': createTournament(); break;
     case 'killTour': killTournament(d.id); break;
+    case 'killRooms': killRooms(d.c.split(',').filter(Boolean)); break;
     case 'copy':
       try { await navigator.clipboard.writeText(d.u); b.textContent = 'Lien copié'; }
       catch (err) { const r = document.createRange(); r.selectNodeContents(document.getElementById('shareUrl')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = 'Lien sélectionné'; }
@@ -713,6 +754,7 @@ window.addEventListener('hashchange', route);
     try { NET = await makeOnline(cfg); S.net = 'online'; }
     catch (e) { NET = LOCAL; S.net = 'local'; S.err = 'Serveur injoignable (' + (e.code || e.message) + '). Mode hors ligne.'; }
   } else { NET = LOCAL; S.net = 'local'; }
+  if (NET.mode === 'online') subs.rooms = NET.watchCol('rooms', rs => { S.rooms = rs.filter(r => r.seats).sort((a, b) => roomActivity(b) - roomActivity(a)); render(); });
   subs.tours = NET.watchCol('tournaments', ts => { S.tours = ts.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); render(); });
   route();
 })();
