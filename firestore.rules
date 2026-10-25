@@ -20,6 +20,16 @@ service cloud.firestore {
       }
     }
 
+    // Profils joueurs : stats publiques (hall of fame) ; fiches de donne écrites en fin de donne par la table.
+    match /players/{pid} {
+      allow read, write: if signedIn();
+      match /deals/{k} { allow read, write: if signedIn(); }
+    }
+    // Code de récupération -> profil : lisible seulement si on connaît le code (pas de liste), jamais modifié.
+    match /profileKeys/{k} {
+      allow get, create: if signedIn();
+    }
+
     match /tournaments/{tid} {
       allow read, write: if signedIn();
       match /results/{r} { allow read, write: if signedIn(); }

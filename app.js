@@ -37,6 +37,7 @@ function makeLocal() {
     watchDoc: (p, cb) => sub(p, cb),
     watchCol: (p, cb) => sub(p + '/*', cb),
     async get(p) { return data[p] ? clone(data[p]) : null; },
+    async getCol(p) { return col(p); },
     async set(p, v) { data[p] = clone(v); save(); },
     async setMany(ws) { for (const w of ws) data[w.path] = clone(w.data); save(); },
     async create(p, v) { if (data[p]) return false; data[p] = clone(v); save(); return true; },
@@ -69,6 +70,7 @@ async function makeOnline(cfg) {
     watchDoc: (p, cb) => F.onSnapshot(F.doc(db, p), s => cb(s.exists() ? s.data() : null), onErr),
     watchCol: (p, cb) => F.onSnapshot(F.collection(db, p), s => cb(s.docs.map(d => ({ ...d.data(), id: d.id }))), onErr),
     get: p => F.getDoc(F.doc(db, p)).then(s => (s.exists() ? s.data() : null)),
+    getCol: p => F.getDocs(F.collection(db, p)).then(s => s.docs.map(d => ({ ...d.data(), id: d.id }))),
     set: (p, v) => F.setDoc(F.doc(db, p), v),
     async setMany(ws) {
       for (let i = 0; i < ws.length; i += 400) {
@@ -119,6 +121,7 @@ const S = {
   colors4: LS.get('sc_colors4', true),
   hands: null, revealed: null, pending: false, confirm: null, showHands: false, showLast: false, bidSel: { value: null, suit: null },
   trickKey: null, trickSeen: 0, pauseUntil: 0,
+  profile: LS.get('sc_profile', null), me: null, prof: null, hof: null, keyIn: '',
 };
 const subs = {};
 function unsub(k) { if (subs[k]) { subs[k](); delete subs[k]; } }
@@ -135,6 +138,8 @@ function route() {
   else if (h.has('t') && h.has('n')) { openTour(h.get('t')); openTable(NET, `tournaments/${h.get('t')}/tables/t${+h.get('n')}`, () => (S.tour ? T.initTour(S.tour, +h.get('n')) : null), { kind: 'tour', n: +h.get('n') }); }
   else if (h.has('t')) { openTour(h.get('t')); S.view = 'tour'; }
   else if (h.has('new')) { S.form = { name: '', tables: 2, perSet: 8 }; S.view = 'create'; }
+  else if (h.has('me') || h.has('p')) { S.view = 'profile'; openProfile(h.has('p') ? h.get('p') : S.profile && S.profile.id); }
+  else if (h.has('hof')) { S.view = 'hof'; openHof(); }
   else { S.view = 'home'; }
   render(); window.scrollTo(0, 0);
 }
@@ -346,6 +351,7 @@ function viewHome() {
       ${S.name ? '' : '<p class="insert" aria-hidden="true">Insérez un prénom pour jouer</p>'}</header>
     ${errBox()}
     ${nameField('homeName')}
+    ${profileBlock()}
     <section class="section"><h2>Partie libre</h2>
       <div class="sheet pad stack">
         ${freeOptions()}
@@ -503,6 +509,165 @@ function shareBox(text, hash) {
     <a class="btn wa" href="https://wa.me/?text=${encodeURIComponent(text + ' ' + url)}" target="_blank" rel="noopener">Envoyer sur WhatsApp</a></div></div>`;
 }
 
+/* ---------- Profil joueur : stats, palmarès, classements de tournoi, hall of fame ---------- */
+// Seules les tables du serveur courant comptent (pas les parties hors ligne quand le jeu est en ligne).
+const myPid = () => (S.profile && S.cur && S.cur.net === NET ? S.profile.id : null);
+const isMe = pid => !!(S.profile && S.profile.id === pid);
+const dateTxt = t => (t ? new Date(t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
+const posTxt = p => (p ? (p === 1 ? '1ER' : p + 'E') : '–');
+
+async function createProfile() {
+  if (!S.name) { S.err = 'Indiquez votre prénom pour créer votre profil.'; render(); const f = document.getElementById('homeName'); if (f) f.focus(); return; }
+  S.busy = true; render();
+  try {
+    const id = 'p' + Date.now().toString(36) + rnd().slice(0, 4);
+    let key = null;
+    for (let k = 0; k < 6 && !key; k++) { const c = P.newKey(); if (await NET.create('profileKeys/' + c, { pid: id })) key = c; }
+    if (!key) throw new Error('code indisponible');
+    const doc = { id, name: S.name, createdAt: Date.now(), updatedAt: Date.now(), tours: {}, summary: P.summary(P.stats([])) };
+    await NET.set('players/' + id, doc);
+    S.profile = { id, key }; LS.set('sc_profile', S.profile); S.me = doc;
+    S.busy = false; go('me');
+  } catch (e) { S.busy = false; S.err = 'Création du profil impossible (' + (e.code || e.message) + ').'; render(); }
+}
+async function linkProfile() {
+  const key = P.normKey(S.keyIn);
+  if (key.length !== 9) { S.err = 'Le code de profil compte 8 caractères (XXXX-XXXX).'; render(); return; }
+  S.busy = true; render();
+  try {
+    const k = await NET.get('profileKeys/' + key), doc = k && await NET.get('players/' + k.pid);
+    S.busy = false;
+    if (!doc) { S.err = 'Aucun profil avec ce code.'; render(); return; }
+    S.profile = { id: k.pid, key }; LS.set('sc_profile', S.profile); S.me = doc; S.keyIn = '';
+    if (!S.name) setName(doc.name || '');
+    go('me');
+  } catch (e) { S.busy = false; S.err = 'Recherche impossible (' + (e.code || e.message) + ').'; render(); }
+}
+function unlinkProfile() {
+  S.profile = null; S.me = null; S.confirm = null; LS.set('sc_profile', null); go('');
+}
+
+/** Charge un profil : fiches de donne, classements à jour des tournois joués. Le sien est republié (hall of fame). */
+async function loadProfile(pid) {
+  const [doc, recs] = await Promise.all([NET.get('players/' + pid), NET.getCol(`players/${pid}/deals`)]);
+  if (!doc) return null;
+  const known = doc.tours || {}, tours = {};
+  await Promise.all(P.tourLines(recs).map(async l => {
+    const base = { name: l.name, table: l.table, side: l.side, deals: l.deals, at: l.at };
+    try {
+      const t = await NET.get('tournaments/' + l.tid);
+      if (!t) { tours[l.tid] = known[l.tid] ? { ...known[l.tid], gone: true } : { ...base, pos: null, of: null, pct: null, done: false, gone: true }; return; }
+      const results = await NET.getCol(`tournaments/${l.tid}/results`);
+      const rk = P.tourRank(results, t.tables, l.table, l.side) || {};
+      tours[l.tid] = { ...base, name: t.name, pos: rk.pos ?? null, of: rk.of ?? null, pct: rk.pct ?? null,
+        done: results.length >= t.tables * t.tables * t.perSet };
+    } catch (e) { if (known[l.tid]) tours[l.tid] = known[l.tid]; }
+  }));
+  const st = P.stats(recs, tours);
+  if (isMe(pid)) {
+    const snap = {}; for (const [k, v] of Object.entries(tours)) { const { gone, ...rest } = v; snap[k] = rest; }
+    const upd = { ...doc, name: S.name || doc.name, tours: snap, summary: P.summary(st), updatedAt: Date.now() };
+    NET.set('players/' + pid, upd).catch(() => {});
+    S.me = upd;
+  }
+  return { pid, doc, recs, tours, st };
+}
+async function openProfile(pid) {
+  if (!pid) { S.prof = { missing: true }; return; }
+  S.prof = { pid, loading: true };
+  try { const p = await loadProfile(pid); if (S.prof && S.prof.pid === pid) S.prof = p || { pid, missing: true }; }
+  catch (e) { S.prof = { pid, missing: true }; S.err = 'Chargement du profil impossible (' + (e.code || e.message) + ').'; }
+  render();
+}
+async function openHof() {
+  S.hof = S.hof || { loading: true };
+  try {
+    if (S.profile) await loadProfile(S.profile.id).catch(() => {}); // ses propres stats à jour avant de comparer
+    const ps = await NET.getCol('players');
+    if (S.profile && S.me) { const i = ps.findIndex(p => p.id === S.profile.id); if (i >= 0) ps[i] = { ...S.me, id: S.profile.id }; }
+    S.hof = { players: ps };
+  } catch (e) { S.hof = { players: [] }; S.err = 'Chargement du hall of fame impossible (' + (e.code || e.message) + ').'; }
+  render();
+}
+
+function profileBlock() {
+  if (S.profile) {
+    const m = S.me && S.me.summary;
+    return `<section class="section"><h2>Mon profil</h2><div class="sheet list">
+      <button class="item" data-a="go" data-h="me"><span class="stack" style="gap:2px"><b>${esc((S.me && S.me.name) || S.name || 'Mon profil')}</b>
+        <span class="meta">${m ? `${m.deals} donne${m.deals > 1 ? 's' : ''} · ${m.wins} partie${m.wins > 1 ? 's' : ''} gagnée${m.wins > 1 ? 's' : ''} · ${m.tours} tournoi${m.tours > 1 ? 's' : ''}` : 'Stats, palmarès et classements'}</span></span><span class="chev" aria-hidden="true">›</span></button>
+      <button class="item" data-a="go" data-h="hof"><span class="stack" style="gap:2px"><b>Hall of fame</b><span class="meta">Les meilleurs coincheurs de la bande</span></span><span class="chev" aria-hidden="true">›</span></button></div></section>`;
+  }
+  return `<section class="section"><h2>Mon profil</h2><div class="sheet pad stack">
+    <p class="muted small">Créez votre profil pour garder vos stats d'une partie à l'autre : contrats, capots, coinches, parties gagnées et vos classements dans chaque tournoi. Il entre au hall of fame.</p>
+    <button class="btn primary block" data-a="createProfile" ${S.busy ? 'disabled' : ''}>Créer mon profil</button>
+    <p class="muted small">Déjà un profil sur un autre téléphone ? Entrez son code.</p>
+    <div class="row join"><input id="pkey" type="text" data-f="key" maxlength="9" placeholder="XXXX-XXXX" value="${esc(S.keyIn)}" aria-label="Code de profil" autocapitalize="characters" autocomplete="off"><button class="btn" data-a="linkProfile" ${S.busy ? 'disabled' : ''}>Retrouver</button></div>
+    <button class="lnk" data-a="go" data-h="hof" style="align-self:flex-start">Voir le hall of fame</button></div></section>`;
+}
+
+function viewProfile() {
+  const pr = S.prof;
+  if (!pr || pr.loading) return `<div class="wrap">${back('Accueil', '')}<p class="muted">Chargement du profil…</p></div>`;
+  if (pr.missing) return `<div class="wrap">${back('Accueil', '')}${errBox()}<h1>Profil introuvable</h1><p class="muted">${S.profile ? 'Ce profil n\'existe plus.' : 'Créez votre profil depuis l\'accueil.'}</p></div>`;
+  const { doc, st, tours } = pr, mine = isMe(pr.pid);
+  const pl = (n, w) => `${n} ${w}${n > 1 ? 's' : ''}`;
+  const tile = (label, big, sub = '') => `<div class="stat sheet"><span class="eyebrow">${label}</span><b>${big}</b>${sub ? `<span class="muted small">${sub}</span>` : ''}</div>`;
+  const tt = P.titles(st);
+  const tourRows = Object.entries(tours).sort((a, b) => (b[1].at || 0) - (a[1].at || 0)).map(([tid, t]) => {
+    const body = `<span class="stack" style="gap:2px"><b>${esc(t.name || 'Tournoi')}</b>
+      <span class="meta">Table ${t.table + 1} · ${t.side === 'NS' ? 'Nord-Sud' : 'Est-Ouest'} · ${pl(t.deals, 'donne')} · ${t.gone ? 'supprimé' : t.done ? 'terminé' : 'en cours'}</span></span>
+      <span class="trank"><span class="pos ${t.pos && t.pos <= 3 ? 'pod' : ''}">${posTxt(t.pos)}${t.of ? `<i>/${t.of}</i>` : ''}</span><span class="pct">${pctTxt(t.pct)}</span></span>`;
+    return t.gone ? `<div class="item">${body}</div>` : `<button class="item" data-a="go" data-h="t=${esc(tid)}">${body}</button>`;
+  }).join('');
+  const partners = st.partners.map(p => p.pid ? `<a href="#p=${esc(p.pid)}">${esc(p.name)}</a> (${p.n})` : `${esc(p.name)} (${p.n})`).join(', ');
+  const best = st.best ? `${valTxt(st.best.value)} ${sym(st.best.suit)}${st.best.coinche === 2 ? ' coinché' : st.best.coinche === 4 ? ' surcoinché' : ''}` : '–';
+  return `<div class="wrap">${back('Accueil', '')}
+    <div class="stack" style="gap:4px"><p class="eyebrow">Profil joueur${mine ? ' · vous' : ''}</p><h1>${esc(doc.name || 'Joueur')}</h1>
+      <p class="muted small">Membre depuis le ${dateTxt(doc.createdAt)}</p></div>
+    ${errBox()}
+    ${tt.length ? `<section class="section"><h2>Palmarès</h2><div class="titles">${tt.map(t => `<div class="ttl"><span class="ic" aria-hidden="true">${t.icon}</span><span><b>${esc(t.name)}</b><br><span class="muted small">${esc(t.why)}</span></span></div>`).join('')}</div></section>` : ''}
+    <section class="section"><h2>Stats</h2>${st.deals ? `<div class="stats">
+      ${tile('Donnes jouées', st.deals, `${st.pts.toLocaleString('fr-FR')} pts marqués`)}
+      ${tile('Parties gagnées', st.wins, st.games ? `sur ${st.games} · ${Math.round(st.wins / st.games * 100)} %` : 'aucune partie finie')}
+      ${tile('Contrats réussis', st.taken ? Math.round(st.rate) + ' %' : '–', `${st.made}/${st.taken} pris par vous`)}
+      ${tile('Capots', st.capots, `${st.teamMade}/${st.teamTaken} contrats d'équipe`)}
+      ${tile('Coinches gagnantes', st.coinchesOk, `sur ${st.coinches} lancées`)}
+      ${tile('Chutes infligées', st.sunk, `en ${pl(st.defended, 'défense')}`)}
+      ${tile('Belotes', st.belotes)}
+      ${tile('Tournois', st.tours, st.tours ? `${pl(st.tourWins, 'victoire')} · ${pl(st.podiums, 'podium')}` : '')}
+    </div>
+    <div class="sheet pad stack small"><p><span class="muted">Plus gros contrat réussi :</span> <b>${best}</b></p>
+      ${st.bestPct !== null ? `<p><span class="muted">Meilleure perf en tournoi :</span> <b>${pctTxt(st.bestPct)}</b></p>` : ''}
+      ${partners ? `<p><span class="muted">Partenaires favoris :</span> ${partners}</p>` : ''}</div>`
+      : `<div class="sheet pad"><p class="muted small">Aucune donne enregistrée. Asseyez-vous à une table en ligne ou de tournoi : chaque donne jouée compte.</p></div>`}</section>
+    ${tourRows ? `<section class="section"><h2>Mes tournois</h2><div class="sheet list">${tourRows}</div><p class="muted small">Place dans le classement de sa ligne (Nord-Sud ou Est-Ouest), en points de match.</p></section>` : ''}
+    <button class="btn gold block" data-a="go" data-h="hof">Hall of fame</button>
+    ${mine ? `<section class="section kill sheet pad stack"><p class="eyebrow">Code de profil</p><p class="url num">${esc(S.profile.key || '')}</p>
+      <p class="muted small">Notez-le : il permet de retrouver ce profil sur un autre téléphone. Ne le partagez pas, il donne accès au profil.</p>
+      ${S.confirm === 'unlink' ? `<p class="small"><b>Retirer le profil de ce téléphone ?</b> <span class="muted">Il reste enregistré ; vous le retrouverez avec le code.</span></p>
+        <div class="row"><button class="btn danger" data-a="unlinkProfile">Oui, retirer</button><button class="btn ghost" data-a="confirm" data-c="">Annuler</button></div>`
+      : `<button class="btn ghost" data-a="confirm" data-c="unlink" style="align-self:flex-start">Retirer de ce téléphone</button>`}</section>` : ''}
+  </div>`;
+}
+
+function viewHof() {
+  const h = S.hof;
+  if (!h || h.loading) return `<div class="wrap">${back('Accueil', '')}<h1>Hall of fame</h1><p class="muted">Chargement…</p></div>`;
+  const MED = ['🥇', '🥈', '🥉'];
+  const boards = P.boards(h.players).filter(b => b.rows.length).map(b => `<div class="sheet"><div class="row between pad" style="padding-bottom:4px"><b>${esc(b.title)}</b>${b.note ? `<span class="muted small">${esc(b.note)}</span>` : ''}</div>
+    ${b.rows.map((r, i) => `<a class="rank hof ${isMe(r.p.id) ? 'me' : ''}" href="#p=${esc(r.p.id)}"><span class="pos">${MED[i] || i + 1 + 'E'}</span>
+      <span style="min-width:0"><b>${esc(r.p.name || 'Joueur')}</b>${isMe(r.p.id) ? ' <span class="you">vous</span>' : ''}${b.sub ? `<br><span class="muted small">${esc(b.sub(r.p.summary))}</span>` : ''}</span>
+      <span class="pct">${b.fmt ? b.fmt(r.v) : r.v}</span></a>`).join('')}</div>`).join('');
+  return `<div class="wrap">${back('Accueil', '')}
+    <div class="stack" style="gap:4px"><p class="eyebrow">Tableaux d'honneur</p><h1>Hall of fame</h1>
+      <p class="muted small">${h.players.length} profil${h.players.length > 1 ? 's' : ''} · stats mises à jour quand chaque joueur ouvre l'app.</p></div>
+    ${errBox()}
+    ${S.profile ? '' : `<div class="sheet pad stack"><p class="small">Pas encore de profil ? Créez-le depuis l'accueil pour entrer au classement.</p></div>`}
+    ${boards || '<div class="sheet pad"><p class="muted small">Aucune donne enregistrée pour l\'instant. Les tableaux se remplissent dès que des joueurs avec profil jouent.</p></div>'}
+  </div>`;
+}
+
 /* ---------- Table : salle d'attente, jeu, fin de donne ---------- */
 const seatName = (d, i) => d.seats[i].name || E.SEAT_NAME[E.SEATS[i]];
 
@@ -526,7 +691,7 @@ function viewLobby(d, title, backH) {
     const s = d.seats[i], label = E.SEAT_NAME[E.SEATS[i]];
     let body;
     if (s.bot) body = `<b>${esc(s.name)}</b><button class="lnk" data-a="leave" data-s="${i}">Retirer l'IA</button>`;
-    else if (s.uid && s.uid === uid()) body = `<b>${esc(s.name || 'Vous')}</b><span class="you">vous</span><button class="lnk" data-a="leave" data-s="${i}">Se lever</button>`;
+    else if (s.uid && s.uid === uid()) body = `<b>${esc(s.name || 'Vous')}</b><span class="you">vous${s.pid ? ' · stats' : ''}</span><button class="lnk" data-a="leave" data-s="${i}">Se lever</button>`;
     else if (s.uid) body = S.confirm === 'take' + i
       ? `<b>${esc(s.name)}</b><span class="small muted">Reprendre ce siège sur ce téléphone ?</span><span class="row"><button class="lnk" data-a="takeover" data-s="${i}">Oui</button><button class="lnk" data-a="confirm" data-c="">Non</button></span>`
       : `<b>${esc(s.name)}</b><button class="lnk" data-a="confirm" data-c="take${i}">C'est moi</button>`;
@@ -537,6 +702,7 @@ function viewLobby(d, title, backH) {
   let status = '';
   if (d.status === 'finished') status = `<div class="sheet pad"><b>Toutes les séries de cette table sont jouées.</b> <span class="muted">Le classement complet est sur la page du tournoi.</span></div>`;
   else if (!full) status = `<p class="muted small">Il faut 4 sièges occupés. Un joueur déjà assis peut prendre un second siège pour jouer en passe-et-joue ; le jeu se masque alors entre ses deux mains.</p>`;
+  if (myPid() && mine.length && !mine.some(i => d.seats[i].pid === S.profile.id)) status += `<p class="muted small">Votre profil n'est lié à aucun de vos sièges : levez-vous puis rasseyez-vous pour que vos donnes comptent dans vos stats.</p>`;
   return `<div class="wrap">${back('Retour', backH)}
     <div class="select-title"><p class="eyebrow">${c.kind === 'tour' ? 'Tournoi duplicate' : 'Partie libre'} · ${title}</p><h1>Sélection des joueurs</h1>
       ${d.kind === 'tour' && d.status !== 'finished' ? `<p class="muted small">Prochaine donne : série ${LETTER(E.setForTable(d.tour.tables, d.table, d.round))}, tour ${d.round + 1}</p>` : ''}
@@ -706,7 +872,7 @@ function render() {
   const sc = window.scrollY;
   let html;
   if (S.view === 'table' && S.cur) html = viewTable();
-  else html = ({ home: viewHome, create: viewCreate, tour: viewTour }[S.view] || viewHome)();
+  else html = ({ home: viewHome, create: viewCreate, tour: viewTour, profile: viewProfile, hof: viewHof }[S.view] || viewHome)();
   // Rien n'a changé : on garde le DOM tel quel, sinon un tap en cours sur un bouton remplacé est perdu.
   if (html === lastHtml) return;
   lastHtml = html;
@@ -724,6 +890,7 @@ $app.addEventListener('input', e => {
   if (t.dataset.f === 'name') setName(t.value);
   if (t.dataset.f === 'tname') S.form.name = t.value;
   if (t.dataset.f === 'code') S.code = t.value.toUpperCase();
+  if (t.dataset.f === 'key') S.keyIn = t.value.toUpperCase();
 });
 $app.addEventListener('click', async e => {
   const b = e.target.closest('[data-a]'); if (!b || b.disabled) return;
@@ -748,8 +915,11 @@ $app.addEventListener('click', async e => {
       break;
     case 'sit':
       if (!name()) { S.err = 'Indiquez votre prénom avant de vous asseoir.'; render(); const f = document.getElementById('lobbyName'); if (f) f.focus(); break; }
-      S.err = ''; act({ type: 'sit', seat: +d.s, name: name() }); break;
-    case 'takeover': S.confirm = null; act({ type: 'takeover', seat: +d.s, name: name() }); break;
+      S.err = ''; act({ type: 'sit', seat: +d.s, name: name(), pid: myPid() }); break;
+    case 'takeover': S.confirm = null; act({ type: 'takeover', seat: +d.s, name: name(), pid: myPid() }); break;
+    case 'createProfile': createProfile(); break;
+    case 'linkProfile': linkProfile(); break;
+    case 'unlinkProfile': unlinkProfile(); break;
     case 'confirm': S.confirm = d.c || null; render(); break;
     case 'leave': act({ type: 'leave', seat: +d.s }); break;
     case 'bot': act({ type: 'bot', seat: +d.s }); break;
@@ -823,6 +993,7 @@ setInterval(checkVersion, 10 * 60000);
   } else { NET = LOCAL; S.net = 'local'; }
   if (NET.mode === 'online') subs.rooms = NET.watchCol('rooms', rs => { S.rooms = rs.filter(r => r.seats).sort((a, b) => roomActivity(b) - roomActivity(a)); if (S.view === 'home') render(); });
   subs.tours = NET.watchCol('tournaments', ts => { S.tours = ts.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); render(); });
+  if (S.profile) NET.get('players/' + S.profile.id).then(p => { S.me = p; render(); }).catch(() => {});
   route();
   checkVersion();
 })();

@@ -116,8 +116,13 @@ const T = (() => {
         },
       });
     }
+    // fiches de donne des joueurs qui ont un profil (stats et classements)
+    if (typeof P !== 'undefined') writes.push(...P.dealRecords(d, g));
     return writes;
   }
+
+  /** Profil joueur porté par un siège : un profil ne tient qu'un siège par table (passe-et-joue : le second siège reste anonyme). */
+  const profileOf = (d, seat, pid) => (pid && !d.seats.some((x, i) => i !== seat && x.pid === pid) ? { pid: String(pid).slice(0, 40) } : {});
 
   class Refused extends Error {}
   const refuse = m => { throw new Refused(m); };
@@ -134,10 +139,10 @@ const T = (() => {
     switch (a.type) {
       case 'sit':
         if (s.bot || (s.uid && s.uid !== uid)) refuse('Siège déjà pris');
-        d.seats[seat] = { uid, name: (a.name || '').slice(0, 24), bot: false }; break;
+        d.seats[seat] = { uid, name: (a.name || '').slice(0, 24), bot: false, ...profileOf(d, seat, a.pid) }; break;
       case 'takeover':
         if (s.bot) refuse('Siège tenu par l\'IA');
-        d.seats[seat] = { uid, name: (a.name || s.name || '').slice(0, 24), bot: false }; break;
+        d.seats[seat] = { uid, name: (a.name || s.name || '').slice(0, 24), bot: false, ...profileOf(d, seat, a.pid) }; break;
       case 'leave':
         if (d.status === 'playing') refuse('Impossible de quitter pendant une donne');
         if (!s.bot && s.uid !== uid) refuse('Ce n\'est pas votre siège');

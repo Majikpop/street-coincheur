@@ -4,7 +4,8 @@ Belote coinchée entre amis, jouable sur téléphone :
 - **table en ligne** : chaque joueur sur son écran, via un lien ou un code à 4 lettres ;
 - **passe-et-joue** : un même téléphone peut tenir deux sièges (le jeu se masque entre les mains) ;
 - **IA** pour compléter une table ;
-- **tournoi duplicate** : toutes les tables jouent les mêmes donnes, par séries de N donnes qui tournent entre les tables, avec classement en points de match (Nord-Sud et Est-Ouest).
+- **tournoi duplicate** : toutes les tables jouent les mêmes donnes, par séries de N donnes qui tournent entre les tables, avec classement en points de match (Nord-Sud et Est-Ouest) ;
+- **profil joueur** : stats d'une partie à l'autre (contrats, capots, coinches, belotes, parties gagnées), palmarès, place obtenue dans chaque tournoi joué, et **hall of fame** de la bande. Un code `XXXX-XXXX` permet de retrouver son profil sur un autre téléphone.
 
 Site statique (HTML/JS, sans compilation) + Firebase (Firestore + connexion anonyme) pour le temps réel.
 
@@ -29,10 +30,12 @@ Sans `config.js` rempli, le jeu fonctionne hors ligne (parties sur le téléphon
 |---|---|
 | `engine.js` | Règles de la coinche, score, IA, duplicate (rotation, points de match) |
 | `table.js` | Protocole d'une table : toute action est validée ici, dans une transaction |
+| `profile.js` | Profils : fiches de donne, stats, classements de tournoi, titres, hall of fame |
 | `app.js` | Interface, connexion Firebase, mode hors ligne |
 | `config.js` | Configuration Firebase du projet |
 | `firestore.rules` | Règles d'accès Firestore |
 | `test/engine.test.js` | Tests du moteur (donnes complètes, score, coinche/surcoinche, duplicate) |
+| `test/profile.test.js` | Tests des profils (fiches écrites en fin de donne, stats, classements, hall of fame) |
 
 ## Tests
 Aucune dépendance, Node 18 ou plus : `npm test` (ou `node --test`).
@@ -40,6 +43,7 @@ Aucune dépendance, Node 18 ou plus : `npm test` (ou `node --test`).
 ## Limites connues (V1 pilote)
 - Pas d'annonces de carrés ou suites (enchères à la couleur, sans atout et tout atout disponibles).
 - Pas de comptes joueurs : identité anonyme par téléphone + prénom. Un joueur qui change de téléphone reprend son siège avec « C'est moi ».
+- Profils : chaque donne jouée à une table en ligne par un siège lié à un profil laisse une fiche (`players/<id>/deals`). Les stats ne comptent qu'à partir de la création du profil. Le résumé affiché au hall of fame est republié quand le joueur ouvre son profil ou le hall of fame. Les fiches sont écrites par les téléphones des joueurs : un bricoleur pourrait gonfler ses stats.
 - Mains privées sans serveur : chaque main est un document à part que seul son joueur peut lire (règles Firestore). Restent possibles pour un bricoleur qui modifie le code :
   - le téléphone qui distribue (partie libre) ou l'organisateur qui crée le tournoi voit passer les quatre jeux ;
   - un joueur assis peut lire les mains de l'IA (ce sont les téléphones des joueurs qui la font jouer) ;
