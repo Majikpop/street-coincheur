@@ -574,7 +574,7 @@ function render() {
   if (!wasGame && $app.querySelector('.game')) window.scrollTo(0, 0);
   document.body.classList.toggle('in-game', !!$app.querySelector('.game'));
   if (keep) { const el = document.getElementById(keep.id); if (el) { el.focus(); try { el.setSelectionRange(keep.s, keep.e); } catch (e) {} } }
-  if (!$app.querySelector('.game')) window.scrollTo(0, sc);
+  if (!$app.querySelector('.game') || wasGame) window.scrollTo(0, sc);
 }
 
 /* ---------- Événements ---------- */

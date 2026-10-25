@@ -141,7 +141,7 @@ input[type=text]::placeholder { color: var(--dim); }
 .teams .a { color: var(--p1); } .teams .b { color: var(--p2); }
 
 /* ---- Table de jeu ---- */
-.game { height: 100%; display: flex; flex-direction: column; background: var(--bg); color: var(--felt-ink); }
+.game { min-height: 100%; min-height: 100dvh; display: flex; flex-direction: column; background: var(--bg); color: var(--felt-ink); }
 .hud { display: grid; grid-template-columns: auto 1fr auto 1fr; align-items: center; gap: 8px; padding-left: max(10px, env(safe-area-inset-left, 0px)); padding-right: max(10px, env(safe-area-inset-right, 0px)); padding-block: 10px 4px; background: var(--bg); }
 .hud .quit { background: var(--panel-2); border: 0; border-radius: 6px; width: 32px; height: 32px; font-family: var(--f-display); color: var(--muted); }
 .side { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
@@ -157,7 +157,7 @@ input[type=text]::placeholder { color: var(--dim); }
 .hud .vs { font-size: 1.25rem; }
 .hudsub { display: flex; justify-content: space-between; gap: 10px; padding: 2px max(12px, env(safe-area-inset-right, 0px)) 8px max(12px, env(safe-area-inset-left, 0px)); font-family: var(--f-hud); font-size: .5rem; color: var(--muted); letter-spacing: .04em; background: var(--bg); }
 .hudsub span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.felt { flex: 1; min-height: 250px; position: relative; overflow: hidden; border-block: 3px solid #05061a;
+.felt { flex: none; height: 44vh; height: clamp(250px, 44dvh, 440px); position: relative; overflow: hidden; border-block: 3px solid #05061a;
   background: radial-gradient(ellipse at 50% 45%, color-mix(in srgb, var(--felt) 82%, white) 0%, var(--felt) 55%, var(--felt-2) 100%); }
 .seat { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; max-width: 34%; }
 .seat .nm { font-weight: 700; font-size: 0.8125rem; padding: 3px 10px; border-radius: 4px; background: rgba(5,6,26,.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; border-bottom: 3px solid transparent; }
@@ -201,7 +201,7 @@ input[type=text]::placeholder { color: var(--dim); }
 .hand.mine .card.ok { transform: translateY(-12px); box-shadow: 0 0 0 2px var(--gold), 0 6px 12px rgba(0,0,0,.5); }
 .hand.mine .card.no { filter: brightness(.5) saturate(.6); }
 .hand.hidden { color: var(--muted); font-size: 0.875rem; padding-block: 18px; text-align: center; }
-.panel { background: var(--panel); color: var(--ink); border-top: 3px solid var(--line); padding-block: 14px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 10px; max-height: 52vh; overflow-y: auto; }
+.panel { background: var(--panel); color: var(--ink); border-top: 3px solid var(--line); padding-block: 14px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 10px; flex: 1; padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px)); }
 .status { font-family: var(--f-display); text-transform: uppercase; font-size: .95rem; }
 .vals { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
 .vals button, .suits button { border: 2px solid var(--line); background: var(--bg-2); border-radius: 7px; padding: 10px 0; font-family: var(--f-hud); font-size: .6rem; }
@@ -227,7 +227,6 @@ input[type=text]::placeholder { color: var(--dim); }
 .cover { position: fixed; inset: 0; z-index: 30; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; text-align: center; padding: 24px max(24px, env(safe-area-inset-right, 0px)) 24px max(24px, env(safe-area-inset-left, 0px)); }
 .cover h2 { font-size: 1.8rem; color: var(--ink); }
 .gerr { padding: 0 12px 8px; background: var(--bg); }
-body.in-game { overflow: hidden; }
 
 /* ---- Annonces plein écran ---- */
 #fx { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; pointer-events: none; }
