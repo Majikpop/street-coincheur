@@ -7,7 +7,9 @@ const LS = {
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const LETTER = i => String.fromCharCode(65 + i);
 const isRed = s => s === 'H' || s === 'D';
-const sym = s => (s === 'NT' || s === 'AT') ? `<span class="suit tx">${E.SYM[s]}</span>` : `<span class="suit ${isRed(s) ? 'red' : 'blk'}">${E.SYM[s]}</span>`;
+// Classes de couleur d'une enseigne : rouge/noir, plus s-D / s-C que le mode 4 couleurs repeint (carreau bleu, trèfle vert).
+const suitCls = s => (isRed(s) ? 'red' : 'blk') + ' s-' + s;
+const sym = s => (s === 'NT' || s === 'AT') ? `<span class="suit tx">${E.SYM[s]}</span>` : `<span class="suit ${suitCls(s)}">${E.SYM[s]}</span>`;
 const clone = o => JSON.parse(JSON.stringify(o));
 const rnd = () => Math.random().toString(36).slice(2, 10);
 
@@ -114,6 +116,7 @@ const S = {
   form: { name: '', tables: 2, perSet: 8 }, code: '',
   cur: null, doc: null, docLoaded: false,
   freeOpts: LS.get('sc_free', { target: 1000, moc: false }),
+  colors4: LS.get('sc_colors4', true),
   hands: null, revealed: null, pending: false, confirm: null, showHands: false, showLast: false, bidSel: { value: null, suit: null },
   trickKey: null, trickSeen: 0, pauseUntil: 0,
 };
@@ -299,7 +302,7 @@ function scheduleBot() {
 }
 
 /* ---------- Rendu : éléments communs ---------- */
-const cardHTML = (c, cls = '') => `<span class="card ${isRed(c.s) ? 'red' : ''} ${cls}" aria-label="${E.RANK_FR[c.r]} de ${E.SUIT_NAME[c.s]}"><b>${E.RANK_FR[c.r]}</b><i>${E.SYM[c.s]}</i></span>`;
+const cardHTML = (c, cls = '') => `<span class="card ${suitCls(c.s)} ${cls}" aria-label="${E.RANK_FR[c.r]} de ${E.SUIT_NAME[c.s]}"><b>${E.RANK_FR[c.r]}</b><i>${E.SYM[c.s]}</i></span>`;
 const valTxt = v => v === 250 ? 'Capot' : v;
 function bidTxt(b) {
   if (b.type === 'pass') return 'Passe';
@@ -350,6 +353,11 @@ function viewHome() {
       ${S.tours.length ? `<div class="sheet list">${tours}</div>` : `<div class="sheet pad"><p class="muted small">Aucun tournoi. Créez-en un : toutes les tables jouent les mêmes donnes, et chaque paire est comparée à celles qui ont occupé la même position.</p></div>`}
       ${netNote()}
     </section>
+    <section class="section"><h2>Affichage</h2><div class="sheet pad stack">
+      <div class="field"><label>Couleurs des cartes</label><div class="chips">
+        <button class="chip ${S.colors4 ? 'on' : ''}" data-a="colors4" data-v="1">4 couleurs <span class="suit s-S">♠</span><span class="suit red">♥</span><span class="suit s-D">♦</span><span class="suit s-C">♣</span></button>
+        <button class="chip ${S.colors4 ? '' : 'on'}" data-a="colors4" data-v="0">Rouge et noir</button></div></div>
+      <p class="muted small">Le carreau en bleu et le trèfle en vert : on distingue les quatre couleurs d'un coup d'œil.</p></div></section>
     ${rulesBlock()}
   </div>`;
 }
@@ -581,7 +589,7 @@ function viewGame(d, title, backH) {
     const cards = g.phase === 'done' ? [] : g.hands[viewer];
     hand = `<div class="hand ${canPlay ? 'mine' : ''}" role="group" aria-label="Votre main">${cards.map(x => {
       const ok = legal.includes(x.r + x.s);
-      return canPlay ? `<button class="card ${isRed(x.s) ? 'red' : ''} ${ok ? 'ok' : 'no'}" data-a="play" data-c="${x.r + x.s}" ${ok ? '' : 'disabled'} aria-label="${E.RANK_FR[x.r]} de ${E.SUIT_NAME[x.s]}"><b>${E.RANK_FR[x.r]}</b><i>${E.SYM[x.s]}</i></button>` : cardHTML(x);
+      return canPlay ? `<button class="card ${suitCls(x.s)} ${ok ? 'ok' : 'no'}" data-a="play" data-c="${x.r + x.s}" ${ok ? '' : 'disabled'} aria-label="${E.RANK_FR[x.r]} de ${E.SUIT_NAME[x.s]}"><b>${E.RANK_FR[x.r]}</b><i>${E.SYM[x.s]}</i></button>` : cardHTML(x);
     }).join('')}</div>`;
   }
   const ctx = d.kind === 'free' ? `${title} · donne ${d.n}` : `${title} · série ${LETTER(Math.floor(g.idx / d.tour.perSet))} · donne ${g.idx + 1}`;
@@ -625,7 +633,7 @@ function panel(d, g, v, mine, paused, cover) {
     const sel = S.bidSel;
     if (sel.value !== null && !o.values.includes(sel.value)) sel.value = null;
     const vals = o.values.map(x => `<button class="${sel.value === x ? 'on' : ''}" data-a="selVal" data-v="${x}">${valTxt(x)}</button>`).join('');
-    const suits = E.CONTRACTS.map(s => `<button class="${isRed(s) ? 'red' : ''} ${s === 'NT' || s === 'AT' ? 'tx' : ''} ${sel.suit === s ? 'on' : ''}" data-a="selSuit" data-s="${s}" aria-label="${E.SUIT_NAME[s]}">${E.SYM[s]}</button>`).join('');
+    const suits = E.CONTRACTS.map(s => `<button class="${s === 'NT' || s === 'AT' ? 'tx' : suitCls(s)} ${sel.suit === s ? 'on' : ''}" data-a="selSuit" data-s="${s}" aria-label="${E.SUIT_NAME[s]}">${E.SYM[s]}</button>`).join('');
     const can = sel.value !== null && sel.suit && !busy();
     const bidBtn = lbl => `<button class="btn primary" data-a="bid" data-t="bid" ${can ? '' : 'disabled'}>${sel.value !== null && sel.suit ? `${lbl} ${valTxt(sel.value)} ${E.SYM[sel.suit]}` : lbl}</button>`;
     const passBtn = o.pass ? `<button class="btn" data-a="bid" data-t="pass" ${dis}>Passer</button>` : '';
@@ -720,6 +728,7 @@ $app.addEventListener('click', async e => {
     case 'createRoom': createRoom(); break;
     case 'newLocal': newLocal(); break;
     case 'optTarget': S.freeOpts = { ...S.freeOpts, target: +d.v }; LS.set('sc_free', S.freeOpts); render(); break;
+    case 'colors4': S.colors4 = d.v === '1'; LS.set('sc_colors4', S.colors4); document.body.classList.toggle('c4', S.colors4); render(); break;
     case 'optMoc': S.freeOpts = { ...S.freeOpts, moc: !S.freeOpts.moc }; LS.set('sc_free', S.freeOpts); render(); break;
     case 'joinCode': { const c = S.code.trim().toUpperCase(); if (c.length === 4) go('r=' + c); else { S.err = 'Le code de table compte 4 lettres.'; render(); } break; }
     case 'step': { const lim = d.k === 'tables' ? [1, 12] : [1, 16]; S.form[d.k] = Math.min(lim[1], Math.max(lim[0], S.form[d.k] + +d.d)); render(); break; }
@@ -784,6 +793,7 @@ setInterval(checkVersion, 10 * 60000);
 
 /* ---------- Démarrage ---------- */
 (async function boot() {
+  document.body.classList.toggle('c4', S.colors4);
   LOCAL = makeLocal();
   render();
   const cfg = window.SC_FIREBASE_CONFIG;

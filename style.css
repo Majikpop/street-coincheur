@@ -5,7 +5,7 @@
   --p1: #ff7a1a; --p1-deep: #b84a00; --p2: #2bb8ff; --p2-deep: #0a6aa8;
   --gold: #ffc93c; --gold-deep: #c98a00; --hot: #ff3d55;
   --felt: #17603f; --felt-2: #0e452e; --felt-ink: #e8f4ec; --felt-muted: #9fc7b1;
-  --card: #fffdf6; --card-ink: #17171c; --card-red: #c8202b;
+  --card: #fffdf6; --card-ink: #17171c; --card-red: #c8202b; --card-blue: #1556c9; --card-green: #12803c;
   --ok: #3ddc84; --bad: #ff5468;
   --f-display: "Bungee", "Arial Black", Impact, sans-serif;
   --f-hud: "Press Start 2P", ui-monospace, Menlo, monospace;
@@ -309,3 +309,14 @@ input[type=text]::placeholder { color: var(--dim); }
 
 /* ---- Nouvelle version disponible ---- */
 .upd { position: fixed; z-index: 50; left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); border: 0; border-radius: 8px; padding: 10px 16px; background: var(--gold); color: #261700; font-family: var(--f-game); font-weight: 700; font-size: .95rem; letter-spacing: .03em; text-transform: uppercase; box-shadow: 0 4px 14px rgba(0,0,0,.5); white-space: nowrap; }
+
+/* ---- Jeu 4 couleurs : carreau bleu, trèfle vert ---- */
+/* Symboles posés sur l'interface sombre : teintes claires */
+.c4 .suit.s-D { color: #6fa6ff; }
+.c4 .suit.s-C { color: #4fd683; }
+/* Sur fond clair (cartes, boutons d'enchère, bulles, puce active) : teintes foncées */
+.c4 .card.s-D, .c4 .suits button.s-D, .c4 .seat .bub:not(.pass) .suit.s-D, .c4 .chip.on .suit.s-D { color: var(--card-blue); }
+.c4 .card.s-C, .c4 .suits button.s-C, .c4 .seat .bub:not(.pass) .suit.s-C, .c4 .chip.on .suit.s-C { color: var(--card-green); }
+.chip .suit { font-size: 1.2em; margin-left: 2px; }
+.chip .suit.red { color: #ff5a64; }
+.chip.on .suit.red { color: var(--card-red); }
