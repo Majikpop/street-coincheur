@@ -237,8 +237,14 @@ input[type=text]::placeholder { color: var(--dim); }
 .scoreline .big { font-family: var(--f-game); font-weight: 700; font-size: 2.2rem; line-height: 1; margin-block: 4px; font-variant-numeric: tabular-nums; }
 .hands4 { display: grid; gap: 8px; }
 .hands4 .h { display: flex; align-items: center; gap: 8px; }
-.hands4 .h > span { width: 46px; font-family: var(--f-game); font-weight: 600; font-size: .8rem; color: var(--muted); flex: none; }
-.hands4 .cs { display: flex; flex-wrap: wrap; gap: 3px; }
+.hands4 .h > span:first-child { width: 46px; font-family: var(--f-game); font-weight: 600; font-size: .8rem; color: var(--muted); flex: none; }
+.hands4 .cs { display: flex; flex-wrap: nowrap; min-width: 0; }
+.hands4 .cs .card { --w: min(10.5vw, 44px); margin-left: calc(var(--w) * -0.28); box-shadow: -1px 0 3px rgba(0,0,0,.35); }
+.hands4 .cs .card:first-child { margin-left: 0; }
+/* Index en coin (valeur puis symbole) pour que chaque carte reste lisible malgré le chevauchement */
+.hands4 .cs .card { height: calc(var(--w) * 1.15); justify-content: flex-start; align-items: flex-start; gap: 2px; padding: 4px 4px; }
+.hands4 .cs .card b { font-size: calc(var(--w) * 0.38); }
+.hands4 .cs .card i { align-self: flex-start; font-size: calc(var(--w) * 0.38); }
 .cover { position: fixed; inset: 0; z-index: 30; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; text-align: center; padding: 24px max(24px, env(safe-area-inset-right, 0px)) 24px max(24px, env(safe-area-inset-left, 0px)); }
 .cover h2 { font-size: 1.8rem; color: var(--ink); }
 .gerr { padding: 0 12px 8px; background: var(--bg); }
