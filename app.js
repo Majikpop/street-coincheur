@@ -521,7 +521,6 @@ $app.addEventListener('input', e => {
   if (t.dataset.f === 'tname') S.form.name = t.value;
   if (t.dataset.f === 'code') S.code = t.value.toUpperCase();
 });
-$app.addEventListener('change', e => { if (e.target.dataset.f === 'name') render(); });
 $app.addEventListener('click', async e => {
   const b = e.target.closest('[data-a]'); if (!b || b.disabled) return;
   const a = b.dataset.a, d = b.dataset;
