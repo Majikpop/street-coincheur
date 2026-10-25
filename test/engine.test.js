@@ -127,8 +127,9 @@ test('donne complète scriptée : capot et belote du preneur', () => {
   E.applyBid(g, S, { type: 'bid', value: 80, suit: 'S' });
   for (const s of [EST, N, O]) E.applyBid(g, s, { type: 'pass' });
   assert.equal(g.phase, 'play');
-  assert.equal(g.beloteSeat, S);
+  assert.equal(g.beloteSeat, null); // mains privées : la belote se déclare quand le roi ou la dame d'atout est jouée
   while (g.phase === 'play') E.playCard(g, g.turn, E.legalCards(g, g.turn)[0]);
+  assert.equal(g.beloteSeat, S);
   assert.deepEqual(g.result.tricks, [8, 0]);
   assert.deepEqual(g.result.cardPts, [250, 0]);
   assert.equal(g.beloteSaid, 2);
