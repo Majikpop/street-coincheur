@@ -105,7 +105,7 @@ function route() {
   const h = new URLSearchParams(location.hash.slice(1));
   S.err = ''; S.confirm = null;
   if (!h.has('t') || h.has('n')) { /* garder la souscription tournoi si on reste dedans */ }
-  unsub('table'); S.cur = null; S.doc = null; S.docLoaded = false; S.revealed = null;
+  unsub('table'); S.cur = null; S.doc = null; S.docLoaded = false; S.revealed = null; S.fxPrev = null;
   if (h.has('r')) openRoom(h.get('r').toUpperCase());
   else if (h.has('local')) openLocal();
   else if (h.has('t') && h.has('n')) { openTour(h.get('t')); openTable(NET, `tournaments/${h.get('t')}/tables/t${+h.get('n')}`, () => (S.tour ? T.initTour(S.tour, +h.get('n')) : null), { kind: 'tour', n: +h.get('n') }); }
@@ -169,7 +169,47 @@ async function createTournament() {
 /* ---------- Déroulé : pause de fin de pli, IA, vibration ---------- */
 const uid = () => (S.cur ? S.cur.net.uid : null);
 const mySeats = d => d ? [0, 1, 2, 3].filter(i => !d.seats[i].bot && d.seats[i].uid === uid()) : [];
-let botTimer = null, pauseTimer = null, wasMyTurn = false;
+let botTimer = null, pauseTimer = null, wasMyTurn = false, fxTimer = null, fxQueue = [];
+const $fx = document.getElementById('fx');
+function fx(main, sub = '', tone = '', delay = 0) {
+  fxQueue.push({ main, sub, tone, at: Date.now() + delay });
+  if (!fxTimer) playFx();
+}
+function playFx() {
+  const n = fxQueue.shift(); if (!n) { fxTimer = null; return; }
+  const wait = Math.max(0, n.at - Date.now());
+  fxTimer = setTimeout(() => {
+    $fx.className = ''; void $fx.offsetWidth;
+    $fx.innerHTML = `<div class="fx-in"><div class="fx-main">${n.main}</div>${n.sub ? `<div class="fx-sub">${n.sub}</div>` : ''}</div>`;
+    $fx.className = 'show ' + n.tone;
+    fxTimer = setTimeout(() => { $fx.innerHTML = ''; $fx.className = ''; playFx(); }, 1500);
+  }, wait);
+}
+/* Détecte les moments forts d'une version à l'autre de la table (jamais au premier affichage). */
+function announce(d, g) {
+  const key = (d.kind === 'free' ? d.n : '') + ':' + g.idx;
+  const now = { key, phase: g.phase, coinche: g.contract ? g.contract.coinche : 1, belote: g.beloteSaid };
+  const prev = S.fxPrev; S.fxPrev = now;
+  if (!prev) return;
+  const who = s => esc(seatName(d, s));
+  if (prev.key !== key) {
+    if (g.phase === 'bid') fx(`Donne ${d.kind === 'free' ? d.n : g.idx + 1}`, `${who(E.next(g.dealer))} parle en premier`);
+    return;
+  }
+  if (now.coinche > prev.coinche) fx(now.coinche === 4 ? 'Surcoinche !!' : 'Coinche !', `${valTxt(g.contract.value)} ${E.SYM[g.contract.suit]} ×${now.coinche}`, 'hot');
+  if (prev.phase === 'bid' && g.phase === 'play') fx("C'est parti !", `${valTxt(g.contract.value)} ${E.SYM[g.contract.suit]} pour ${who(g.contract.seat)}`);
+  if (now.belote > prev.belote) fx(now.belote === 1 ? 'Belote !' : 'Rebelote !', who(g.beloteSeat), 'cool', 700);
+  if (prev.phase !== 'done' && g.phase === 'done') {
+    const r = g.result, wait = Math.max(0, S.pauseUntil - Date.now());
+    if (r.passed) fx('Donne passée', 'Personne ne prend', 'cool');
+    else {
+      const att = E.team(g.contract.seat);
+      if (r.made && r.tricks[att] === 8) fx('Capot !!', `${esc(T.names(d, att))}`, 'good', wait);
+      else if (r.made) fx('Contrat réussi', `${esc(T.names(d, att))} · ${att === 0 ? r.ns : r.ew} pts`, 'good', wait);
+      else fx('Dedans !', `${esc(T.names(d, 1 - att))} · ${att === 0 ? r.ew : r.ns} pts`, 'hot', wait);
+    }
+  }
+}
 function onDoc() {
   const d = S.doc, g = d && T.getGame(d);
   if (g) {
@@ -180,6 +220,7 @@ function onDoc() {
     const myTurn = d.status === 'playing' && g.phase !== 'done' && mine.includes(g.turn);
     if (myTurn && !wasMyTurn && mine.length === 1 && navigator.vibrate) { try { navigator.vibrate(60); } catch (e) {} }
     wasMyTurn = myTurn;
+    announce(d, g);
   }
   scheduleBot();
 }
@@ -224,15 +265,16 @@ function viewHome() {
       <span class="chev" aria-hidden="true">›</span></button>`).join('');
   const online = S.net === 'online';
   return `<div class="wrap">
-    <header class="brand"><div class="brand-mark" aria-hidden="true"><span>V</span><span>9</span></div>
-      <div><h1>Street Coincheur</h1><p class="muted">La belote coinchée entre amis, à une table ou en donnes duplicate.</p></div></header>
+    <header class="stack" style="gap:14px"><h1 class="logo" aria-label="Street Coincheur"><span class="l1">Street</span><span class="l2">Coincheur</span></h1>
+      <p class="tagline">La belote coinchée entre amis, à une table ou en donnes duplicate.</p>
+      ${S.name ? '' : '<p class="insert" aria-hidden="true">Insérez un prénom pour jouer</p>'}</header>
     ${errBox()}
     ${nameField('homeName')}
     <section class="section"><h2>Partie libre</h2>
       <div class="sheet pad stack">
         ${online ? `<p class="muted small">Créez une table, partagez le lien, chacun joue sur son téléphone. Les sièges vides peuvent être tenus par l'IA ou par un joueur déjà assis (passe-et-joue).</p>
         <button class="btn primary block" data-a="createRoom" ${S.busy ? 'disabled' : ''}>Créer une table en ligne</button>
-        <div class="row join"><input id="code" type="text" data-f="code" maxlength="4" placeholder="Code (ex. KQ7B)" value="${esc(S.code)}" aria-label="Code de table" autocapitalize="characters"><button class="btn" data-a="joinCode">Rejoindre</button></div>` : ''}
+        <div class="row join"><input id="code" type="text" data-f="code" maxlength="4" placeholder="CODE" value="${esc(S.code)}" aria-label="Code de table" autocapitalize="characters"><button class="btn" data-a="joinCode">Rejoindre</button></div>` : ''}
         <button class="btn ${online ? 'ghost' : 'primary'} block" data-a="go" data-h="local">Jouer sur ce téléphone</button>
       </div></section>
     <section class="section">
@@ -295,7 +337,7 @@ function viewTour() {
   const rankList = side => {
     const lines = st.filter(l => l.side === side && l.played).sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1));
     if (!lines.length) return `<p class="muted small pad">Aucune donne jouée.</p>`;
-    return lines.map((l, i) => `<div class="rank"><span class="pos">${l.pct === null ? '–' : i + 1}</span>
+    return lines.map((l, i) => `<div class="rank rk-${side.toLowerCase()}"><span class="pos">${l.pct === null ? '–' : (i === 0 ? '1ER' : (i + 1) + 'E')}</span>
       <span style="min-width:0"><b>Table ${l.table + 1}</b> <span class="muted small">${esc(l.names)}</span><div class="bar"><i style="width:${l.pct ?? 0}%"></i></div>
       <span class="muted small">${l.played} jouée${l.played > 1 ? 's' : ''}, ${l.compared} comparée${l.compared > 1 ? 's' : ''}</span></span><span class="pct">${pctTxt(l.pct)}</span></div>`).join('');
   };
@@ -363,20 +405,22 @@ function viewLobby(d, title, backH) {
       ? `<b>${esc(s.name)}</b><span class="small muted">Reprendre ce siège sur ce téléphone ?</span><span class="row"><button class="lnk" data-a="takeover" data-s="${i}">Oui</button><button class="lnk" data-a="confirm" data-c="">Non</button></span>`
       : `<b>${esc(s.name)}</b><button class="lnk" data-a="confirm" data-c="take${i}">C'est moi</button>`;
     else body = `<button class="btn primary sm" data-a="sit" data-s="${i}">${mine.length ? 'Prendre aussi' : "S'asseoir"}</button><button class="lnk" data-a="bot" data-s="${i}">IA</button>`;
-    return `<div class="sc s${i}"><span class="eyebrow">${label}</span>${body}</div>`;
+    const who = s.bot ? 'IA' : (s.name || '').trim().charAt(0).toUpperCase() || '?';
+    return `<div class="sc s${i} t${i % 2} ${s.uid || s.bot ? 'taken' : ''}"><span class="eyebrow">${label}</span><span class="avatar ${s.uid || s.bot ? 'on' : ''}" aria-hidden="true">${s.uid || s.bot ? esc(who) : '?'}</span>${body}</div>`;
   };
   let status = '';
   if (d.status === 'finished') status = `<div class="sheet pad"><b>Toutes les séries de cette table sont jouées.</b> <span class="muted">Le classement complet est sur la page du tournoi.</span></div>`;
   else if (!full) status = `<p class="muted small">Il faut 4 sièges occupés. Un joueur déjà assis peut prendre un second siège pour jouer en passe-et-joue ; le jeu se masque alors entre ses deux mains.</p>`;
   return `<div class="wrap">${back('Retour', backH)}
-    <div class="stack" style="gap:4px"><p class="eyebrow">${c.kind === 'tour' ? 'Tournoi duplicate' : 'Partie libre'}</p><h1>${title}</h1>
+    <div class="select-title"><p class="eyebrow">${c.kind === 'tour' ? 'Tournoi duplicate' : 'Partie libre'} · ${title}</p><h1>Sélection des joueurs</h1>
       ${d.kind === 'tour' && d.status !== 'finished' ? `<p class="muted small">Prochaine donne : série ${LETTER(E.setForTable(d.tour.tables, d.table, d.round))}, tour ${d.round + 1}</p>` : ''}
       ${d.kind === 'free' && d.n ? `<p class="muted small">Score : NS ${d.scores[0]} · EO ${d.scores[1]} (en ${d.target})</p>` : ''}</div>
     ${errBox()}
     ${needName ? nameField('lobbyName') : ''}
     ${c.kind === 'free' && !c.local ? shareBox(`Viens jouer à la coinche, table ${d.code} :`, 'r=' + d.code) : ''}
     ${c.kind === 'tour' ? shareBox(`Table ${c.n + 1} du tournoi « ${S.tour ? S.tour.name : ''} » :`, `t=${S.tourId}&n=${c.n}`) : ''}
-    <div class="compass">${[2, 3, 1, 0].map(seatCard).join('')}<div class="mid" aria-hidden="true"></div></div>
+    <div class="teams" aria-hidden="true"><span class="a">P1 · Nord-Sud</span><span class="b">P2 · Est-Ouest</span></div>
+    <div class="compass">${[2, 3, 1, 0].map(seatCard).join('')}<div class="mid" aria-hidden="true"><span class="vs">VS</span></div></div>
     ${status}
     ${d.status !== 'finished' ? `<div class="row wrapr">${!full ? `<button class="btn ghost" data-a="fillBots" ${busy() ? 'disabled' : ''}>Compléter avec l'IA</button>` : ''}
       <button class="btn primary grow" data-a="${d.status === 'between' ? 'next' : 'start'}" ${full && mine.length && !busy() ? '' : 'disabled'}>${d.status === 'between' ? 'Donne suivante' : 'Distribuer'}</button></div>` : ''}
@@ -399,15 +443,15 @@ function viewGame(d, title, backH) {
     const isTurn = g.turn === s && g.phase !== 'done' && !paused;
     const bub = lb ? `<span class="bub ${lb.type === 'pass' ? 'pass' : lb.type !== 'bid' ? 'hot' : ''}">${bidTxt(lb)}</span>` : '';
     const backs = p !== 0 && g.phase !== 'done' ? `<span class="backs">${'<i></i>'.repeat(g.hands[s].length)}</span>` : '';
-    return `<div class="seat p${p} ${isTurn ? 'turn' : ''}">${p === 0 ? bub : ''}
+    return `<div class="seat p${p} t${s % 2} ${isTurn ? 'turn' : ''}">${p === 0 ? bub : ''}
       <span class="nm">${esc(seatName(d, s))}${g.dealer === s ? '<span class="dealer" title="Donneur">D</span>' : ''}</span>${p !== 0 ? backs + bub : ''}</div>`;
   }).join('');
 
   const shown = paused ? g.lastTrick : g.trick;
   const win = paused ? E.trickWinner(g.lastTrick, g.contract.suit) : null;
   const trick = `<div class="trick">${(shown || []).map(x => cardHTML(x.card, 't' + pos(x.seat) + (x.seat === win ? ' win' : ''))).join('')}</div>`;
-  const contract = g.contract ? `<div class="contract">Contrat<br><b>${valTxt(g.contract.value)} <span class="${isRed(g.contract.suit) ? 'red' : ''}">${E.SYM[g.contract.suit]}</span></b> ${esc(seatName(d, g.contract.seat))}${g.contract.coinche > 1 ? `<br>${g.contract.coinche === 2 ? 'Coinché' : 'Surcoinché'}` : ''}</div>` : '';
-  const plis = g.phase !== 'bid' ? `<div class="plis">Plis<br>NS ${tw[0]} · EO ${tw[1]}</div>` : '';
+  const contract = g.contract ? `<div class="contract">Contrat<br><b>${valTxt(g.contract.value)} <span class="${isRed(g.contract.suit) ? 'red' : ''}">${E.SYM[g.contract.suit]}</span></b> ${esc(seatName(d, g.contract.seat))}${g.contract.coinche > 1 ? `<br><span class="x2">${g.contract.coinche === 2 ? 'Coinché ×2' : 'Surcoinché ×4'}</span>` : ''}</div>` : '';
+  const plis = g.phase !== 'bid' ? `<div class="plis">Plis<br><span class="a">NS ${tw[0]}</span> · <span class="b">EO ${tw[1]}</span></div>` : '';
 
   const canPlay = g.phase === 'play' && g.turn === viewer && mine.includes(viewer) && !paused && !cover && !busy();
   let hand;
@@ -422,9 +466,9 @@ function viewGame(d, title, backH) {
     }).join('')}</div>`;
   }
   const ctx = d.kind === 'free' ? `${title} · donne ${d.n}` : `${title} · série ${LETTER(Math.floor(g.idx / d.tour.perSet))} · donne ${g.idx + 1}`;
-  const score = d.kind === 'free' ? `<div class="gscore"><span>NS ${d.scores[0]}</span><span>EO ${d.scores[1]}</span></div>` : '';
   return `<div class="game">
-    <header class="gbar"><button data-a="go" data-h="${esc(backH)}">‹ Quitter</button><div class="gctx">${ctx}</div>${score}</header>
+    ${hud(d, g, backH)}
+    <div class="hudsub"><span>${ctx}</span>${d.kind === 'free' ? `<span>NS ${d.scores[0]} · EO ${d.scores[1]} / ${d.target}</span>` : ''}</div>
     ${S.err ? `<div class="gerr">${errBox()}</div>` : ''}
     <div class="felt">${contract}${plis}${seats}${trick}</div>
     <div class="handzone">${hand}</div>
@@ -432,6 +476,21 @@ function viewGame(d, title, backH) {
     ${cover ? `<div class="cover"><p class="eyebrow">${g.phase === 'bid' ? 'Enchères' : 'Jeu de la carte'}</p><h2>À ${esc(seatName(d, g.turn))} de jouer</h2>
       <p>Passez le téléphone. Les autres ne regardent pas.</p><button class="btn gold" data-a="reveal">C'est moi, afficher mon jeu</button></div>` : ''}
   </div>`;
+}
+
+/* Jauges façon barres de vie : points de cartes ramassés par chaque camp pendant la donne. */
+function hud(d, g, backH) {
+  const pts = [0, 0];
+  for (const t of g.tricks) for (const x of t.cards) pts[E.team(t.winner)] += E.points(x.card, g.contract ? g.contract.suit : null);
+  if (g.tricks.length === 8) pts[E.team(g.tricks[7].winner)] += 10;
+  const att = g.contract ? E.team(g.contract.seat) : null;
+  const side = tm => {
+    const w = Math.min(100, pts[tm] / 162 * 100);
+    const goal = att === tm && g.contract.value <= 162 ? `<span class="goal" style="${tm === 0 ? 'left' : 'right'}:${g.contract.value / 162 * 100}%" title="Objectif ${g.contract.value}"></span>` : '';
+    return `<div class="side ${tm === 0 ? 'ns' : 'eo'}"><span class="tn">${esc(T.names(d, tm))}</span><div class="life" role="meter" aria-valuemin="0" aria-valuemax="162" aria-valuenow="${pts[tm]}" aria-label="${tm === 0 ? 'Nord-Sud' : 'Est-Ouest'}"><i style="width:${w}%"></i>${goal}</div>
+      <span class="pts">${pts[tm]}${att === tm ? ' / ' + valTxt(g.contract.value) : ''}</span></div>`;
+  };
+  return `<header class="hud"><button class="quit" data-a="go" data-h="${esc(backH)}" aria-label="Quitter la table">‹</button>${side(0)}<span class="vs" aria-hidden="true">VS</span>${side(1)}</header>`;
 }
 
 function panel(d, g, v, mine, paused, cover) {
@@ -471,10 +530,10 @@ function bidHistory(d, g) {
 function resultPanel(d, g, mine) {
   const r = g.result;
   let head;
-  if (r.passed) head = `<div class="res-head"><span class="verdict">Donne passée</span><span class="muted small">personne n'a annoncé</span></div>`;
+  if (r.passed) head = `<div class="res-head"><span class="verdict">Donne passée</span><span class="muted small">Personne n'a annoncé.</span></div>`;
   else {
     const att = E.team(g.contract.seat);
-    head = `<div class="res-head"><span class="verdict ${r.made ? 'ok' : 'bad'}">${r.made ? 'Contrat réussi' : 'Contrat chuté'}</span><span class="small muted">${contractTxt(g.contract)} par ${esc(seatName(d, g.contract.seat))}</span></div>
+    head = `<div class="res-head"><span class="verdict ${r.made ? 'ok' : 'bad'}">${r.made ? (r.tricks[att] === 8 ? 'Capot !' : 'Contrat réussi') : 'Dedans !'}</span><span class="small muted">${contractTxt(g.contract)} par ${esc(seatName(d, g.contract.seat))}</span></div>
       <p class="small muted">Points faits : NS ${r.cardPts[0]}, EO ${r.cardPts[1]}${r.belote !== null ? ` · belote ${r.belote === 0 ? 'NS' : 'EO'}` : ''} · plis ${r.tricks[0]}–${r.tricks[1]}${r.tricks[att] === 8 ? ' · capot !' : ''}</p>`;
   }
   const line = `<div class="scoreline"><div><p class="eyebrow">Nord-Sud</p><p class="big">${r.ns}</p><p class="small muted">${esc(T.names(d, 0))}</p></div>
@@ -510,7 +569,9 @@ function render() {
   let html;
   if (S.view === 'table' && S.cur) html = viewTable();
   else html = ({ home: viewHome, create: viewCreate, tour: viewTour }[S.view] || viewHome)();
+  const wasGame = !!$app.querySelector('.game');
   $app.innerHTML = html;
+  if (!wasGame && $app.querySelector('.game')) window.scrollTo(0, 0);
   document.body.classList.toggle('in-game', !!$app.querySelector('.game'));
   if (keep) { const el = document.getElementById(keep.id); if (el) { el.focus(); try { el.setSelectionRange(keep.s, keep.e); } catch (e) {} } }
   if (!$app.querySelector('.game')) window.scrollTo(0, sc);
