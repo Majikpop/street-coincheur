@@ -32,6 +32,10 @@ Sans `config.js` rempli, le jeu fonctionne hors ligne (parties sur le téléphon
 | `app.js` | Interface, connexion Firebase, mode hors ligne |
 | `config.js` | Configuration Firebase du projet |
 | `firestore.rules` | Règles d'accès Firestore |
+| `test/engine.test.js` | Tests du moteur (donnes complètes, score, coinche/surcoinche, duplicate) |
+
+## Tests
+Aucune dépendance, Node 18 ou plus : `npm test` (ou `node --test`).
 
 ## Limites connues (V1 pilote)
 - Enchères à la couleur seulement (pas de sans-atout / tout-atout), pas d'annonces de carrés ou suites.
