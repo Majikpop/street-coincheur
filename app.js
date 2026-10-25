@@ -293,8 +293,15 @@ function onDoc() {
 function scheduleBot() {
   clearTimeout(botTimer);
   const d = S.doc; if (!d || d.status !== 'playing') return;
-  const g = game(d); if (!g || g.phase === 'done' || !d.seats[g.turn].bot || !g.hands[g.turn]) return;
+  const g = game(d); if (!g || g.phase === 'done' || !g.hands[g.turn]) return;
   const mine = mySeats(d); if (!mine.length) return; // seuls les joueurs assis font jouer l'IA
+  if (!d.seats[g.turn].bot) {
+    // Dernier pli : plus qu'une carte en main, pas d'autre choix, on la lance pour le joueur.
+    const seat = g.turn, rev = d.rev, h = g.hands[seat];
+    if (g.phase !== 'play' || !mine.includes(seat) || h.length !== 1) return;
+    botTimer = setTimeout(() => { if (S.doc && S.doc.rev === rev) act({ type: 'card', seat, card: h[0] }); }, Math.max(0, S.pauseUntil - Date.now()) + 700);
+    return;
+  }
   const rank = d.seats.filter(s => !s.bot && s.uid).findIndex(s => s.uid === uid());
   const wait = Math.max(0, S.pauseUntil - Date.now()) + (g.phase === 'bid' ? 700 : 600) + Math.max(0, rank) * 350;
   const rev = d.rev, seat = g.turn;
@@ -750,8 +757,8 @@ $app.addEventListener('click', async e => {
     case 'start': S.lobbyOnly = false; act({ type: 'start' }); break;
     case 'next': S.lobbyOnly = false; act({ type: 'next' }); break;
     case 'reveal': S.revealed = game(S.doc).turn; render(); break;
-    case 'selVal': S.bidSel.value = +d.v; render(); break;
-    case 'selSuit': S.bidSel.suit = d.s; render(); break;
+    case 'selVal': S.bidSel.value = +d.v; render(); autoBid(); break;
+    case 'selSuit': S.bidSel.suit = d.s; render(); autoBid(); break;
     case 'bid': {
       const g = game(S.doc);
       if (d.t === 'bid') { if (S.bidSel.value === null || !S.bidSel.suit) return; act({ type: 'bid', seat: g.turn, bid: { type: 'bid', value: S.bidSel.value, suit: S.bidSel.suit } }); }
@@ -765,6 +772,19 @@ $app.addEventListener('click', async e => {
   }
 });
 window.addEventListener('hashchange', route);
+
+/* Montant et couleur choisis : l'annonce part toute seule (après un court instant pour voir la sélection). */
+let autoBidTimer = null;
+function autoBid() {
+  clearTimeout(autoBidTimer);
+  const sel = S.bidSel; if (sel.value === null || !sel.suit) return;
+  const rev = S.doc && S.doc.rev, pick = { ...sel };
+  autoBidTimer = setTimeout(() => {
+    const btn = $app.querySelector('[data-a="bid"][data-t="bid"]');
+    if (!S.doc || S.doc.rev !== rev || S.bidSel.value !== pick.value || S.bidSel.suit !== pick.suit || !btn || btn.disabled) return;
+    btn.click();
+  }, 300);
+}
 
 /* ---------- Mise à jour de l'app ----------
    Lancée depuis l'écran d'accueil, l'app reprend souvent la page gardée en mémoire au lieu de la recharger :
