@@ -38,6 +38,7 @@ function makeLocal() {
     async set(p, v) { data[p] = clone(v); save(); },
     async setMany(ws) { for (const w of ws) data[w.path] = clone(w.data); save(); },
     async create(p, v) { if (data[p]) return false; data[p] = clone(v); save(); return true; },
+    async removeTree(p) { for (const k of Object.keys(data)) if (k === p || k.startsWith(p + '/')) delete data[k]; save(); },
     async act(p, init, a) {
       const cur = data[p] || (init && init()); if (!cur) return 'Table introuvable';
       try { const r = T.apply(cur, a, this.uid); data[p] = r.doc; for (const w of r.writes) data[w.path] = w.data; save(); return true; }
@@ -78,6 +79,15 @@ async function makeOnline(cfg) {
       const ref = F.doc(db, p); const s = await tx.get(ref);
       if (s.exists()) return false; tx.set(ref, v); return true;
     }),
+    /** Supprime un document et ses sous-collections nommées (Firestore ne supprime pas en cascade). */
+    async removeTree(p, subcols = []) {
+      const refs = [];
+      for (const c of subcols) (await F.getDocs(F.collection(db, p + '/' + c))).forEach(d => refs.push(d.ref));
+      refs.push(F.doc(db, p));
+      for (let i = 0; i < refs.length; i += 400) {
+        const b = F.writeBatch(db); refs.slice(i, i + 400).forEach(r => b.delete(r)); await b.commit();
+      }
+    },
     async act(p, init, a) {
       const ref = F.doc(db, p);
       try {
@@ -176,6 +186,18 @@ async function createTournament() {
   S.busy = true; render();
   try { await NET.set('tournaments/' + id, tour); await NET.setMany(T.tourHands(tour, rnd() + rnd())); S.busy = false; go('t=' + id); }
   catch (e) { S.busy = false; S.err = 'Création impossible (' + (e.code || e.message) + ').'; render(); }
+}
+
+/** Supprime un tournoi qui ne sera pas terminé : tables, résultats et tournoi. */
+async function killTournament() {
+  const tid = S.tourId; if (!tid) return;
+  S.busy = true; S.confirm = null; render();
+  try {
+    await NET.removeTree('tournaments/' + tid, ['tables', 'results']);
+    ['tour', 'results', 'tables'].forEach(unsub);
+    S.tourId = null; S.tour = null; S.results = []; S.tables = {}; S.busy = false;
+    go('');
+  } catch (e) { S.busy = false; S.err = 'Suppression impossible (' + (e.code || e.message) + ').'; render(); }
 }
 
 /* ---------- Déroulé : pause de fin de pli, IA, vibration ---------- */
@@ -408,6 +430,10 @@ function viewTour() {
       <div class="sheet"><p class="eyebrow pad" style="padding-bottom:0">Lignes Est-Ouest</p>${rankList('EO')}</div></section>
     <section class="section"><h2>Rotation des séries</h2>${sched}</section>
     <section class="section"><h2>Donne par donne</h2>${detail}</section>
+    <section class="section kill sheet pad stack">${S.confirm === 'kill'
+      ? `<p><b>Supprimer « ${esc(t.name)} » ?</b> <span class="muted small">Les tables${S.results.length ? `, les ${S.results.length} résultat${S.results.length > 1 ? 's' : ''}` : ''} et le classement seront effacés pour tout le monde. Impossible de revenir en arrière.</span></p>
+        <div class="row"><button class="btn danger" data-a="killTour" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Suppression…' : 'Oui, supprimer'}</button><button class="btn ghost" data-a="confirm" data-c="">Annuler</button></div>`
+      : `<p class="muted small">Tournoi abandonné, qui ne sera pas fini ?</p><button class="btn danger" data-a="confirm" data-c="kill">Kill</button>`}</section>
   </div>`;
 }
 
@@ -644,6 +670,7 @@ $app.addEventListener('click', async e => {
     case 'joinCode': { const c = S.code.trim().toUpperCase(); if (c.length === 4) go('r=' + c); else { S.err = 'Le code de table compte 4 lettres.'; render(); } break; }
     case 'step': { const lim = d.k === 'tables' ? [1, 12] : [1, 16]; S.form[d.k] = Math.min(lim[1], Math.max(lim[0], S.form[d.k] + +d.d)); render(); break; }
     case 'createTour': createTournament(); break;
+    case 'killTour': killTournament(); break;
     case 'copy':
       try { await navigator.clipboard.writeText(d.u); b.textContent = 'Lien copié'; }
       catch (err) { const r = document.createRange(); r.selectNodeContents(document.getElementById('shareUrl')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = 'Lien sélectionné'; }
