@@ -256,3 +256,16 @@ input[type=text]::placeholder { color: var(--dim); }
 .poster { margin-inline: calc(-1 * max(16px, env(safe-area-inset-left, 0px))); }
 .poster svg { display: block; width: 100%; height: auto; max-width: 100%; }
 @media (min-width: 600px) { .poster { margin-inline: 0; } .poster svg { border-radius: 12px; border: 2px solid var(--line); } }
+
+/* ---- Symboles de couleur bien lisibles partout ---- */
+.suit { font-family: "Atkinson Hyperlegible", system-ui, sans-serif; font-size: 1.55em; line-height: 0; vertical-align: -0.16em; font-weight: 700; }
+.suit.red { color: var(--card-red); }
+.seat .bub { font-size: .75rem; padding: 6px 9px; border-radius: 5px; display: inline-flex; align-items: center; gap: 4px; }
+.seat .bub .suit { font-size: 1.7em; }
+.seat .bub.pass .suit, .contract .suit.blk { color: #fff; }
+.contract { font-size: .75rem; }
+.contract b { font-size: .8rem; display: inline-flex; align-items: center; gap: 4px; }
+.contract .suit { font-size: 1.9em; }
+.contract .suit.red { color: #ff5a64; text-shadow: 0 0 1px #fff; }
+.status .suit, .muted .suit, .small .suit { font-size: 1.35em; }
+.status .suit.red { color: #ff5a64; }

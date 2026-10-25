@@ -7,7 +7,7 @@ const LS = {
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const LETTER = i => String.fromCharCode(65 + i);
 const isRed = s => s === 'H' || s === 'D';
-const sym = s => `<span class="${isRed(s) ? 'red' : ''}">${E.SYM[s]}</span>`;
+const sym = s => `<span class="suit ${isRed(s) ? 'red' : 'blk'}">${E.SYM[s]}</span>`;
 const clone = o => JSON.parse(JSON.stringify(o));
 const rnd = () => Math.random().toString(36).slice(2, 10);
 
@@ -450,7 +450,7 @@ function viewGame(d, title, backH) {
   const shown = paused ? g.lastTrick : g.trick;
   const win = paused ? E.trickWinner(g.lastTrick, g.contract.suit) : null;
   const trick = `<div class="trick">${(shown || []).map(x => cardHTML(x.card, 't' + pos(x.seat) + (x.seat === win ? ' win' : ''))).join('')}</div>`;
-  const contract = g.contract ? `<div class="contract">Contrat<br><b>${valTxt(g.contract.value)} <span class="${isRed(g.contract.suit) ? 'red' : ''}">${E.SYM[g.contract.suit]}</span></b> ${esc(seatName(d, g.contract.seat))}${g.contract.coinche > 1 ? `<br><span class="x2">${g.contract.coinche === 2 ? 'Coinché ×2' : 'Surcoinché ×4'}</span>` : ''}</div>` : '';
+  const contract = g.contract ? `<div class="contract">Contrat<br><b>${valTxt(g.contract.value)} ${sym(g.contract.suit)}</b> ${esc(seatName(d, g.contract.seat))}${g.contract.coinche > 1 ? `<br><span class="x2">${g.contract.coinche === 2 ? 'Coinché ×2' : 'Surcoinché ×4'}</span>` : ''}</div>` : '';
   const plis = g.phase !== 'bid' ? `<div class="plis">Plis<br><span class="a">NS ${tw[0]}</span> · <span class="b">EO ${tw[1]}</span></div>` : '';
 
   const canPlay = g.phase === 'play' && g.turn === viewer && mine.includes(viewer) && !paused && !cover && !busy();
