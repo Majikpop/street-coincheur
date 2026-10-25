@@ -38,6 +38,6 @@ Sans `config.js` rempli, le jeu fonctionne hors ligne (parties sur le téléphon
 Aucune dépendance, Node 18 ou plus : `npm test` (ou `node --test`).
 
 ## Limites connues (V1 pilote)
-- Enchères à la couleur seulement (pas de sans-atout / tout-atout), pas d'annonces de carrés ou suites.
+- Pas d'annonces de carrés ou suites (enchères à la couleur, sans atout et tout atout disponibles).
 - Pas de comptes joueurs : identité anonyme par téléphone + prénom. Un joueur qui change de téléphone reprend son siège avec « C'est moi ».
 - Les mains sont dans la base partagée : un joueur bricoleur pourrait les lire. Acceptable entre amis, à revoir avant une diffusion large.
