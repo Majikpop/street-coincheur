@@ -198,6 +198,12 @@ input[type=text]::placeholder { color: var(--dim); }
 .trick .t3 { left: 0; top: 50%; translate: 0 -50%; rotate: -6deg; }
 .trick .win { box-shadow: 0 0 0 3px var(--gold), 0 0 16px var(--gold); }
 @keyframes slam { from { scale: 1.35; opacity: .2; } }
+.lastbtn { position: absolute; left: 10px; bottom: 10px; z-index: 3; border: 2px solid rgba(255,255,255,.35); border-radius: 7px; padding: 6px 10px; background: rgba(5,6,26,.6); color: var(--felt-ink); font-family: var(--f-game); font-weight: 700; font-size: .85rem; letter-spacing: .03em; text-transform: uppercase; }
+.lastbtn.on { background: var(--gold); border-color: var(--gold); color: #261700; }
+.lastpli { position: absolute; inset: 0; z-index: 2; border: 0; padding: 0; margin: 0; background: rgba(5,6,26,.8); color: var(--ink); animation: fade .15s ease-out; }
+.lastpli .lp-head { position: absolute; top: 10px; z-index: 1; background: var(--bg); border: 2px solid var(--gold); border-radius: 6px; padding: 5px 12px; left: 50%; transform: translateX(-50%); white-space: nowrap; max-width: 94%; overflow: hidden; text-overflow: ellipsis; font-family: var(--f-game); font-weight: 700; font-size: 1rem; letter-spacing: .03em; text-transform: uppercase; color: var(--gold); font-variant-numeric: tabular-nums; }
+.lastpli .trick .card { animation: none; }
+@keyframes fade { from { opacity: 0; } }
 .card { --w: 50px; width: var(--w); height: calc(var(--w) * 1.42); border-radius: 6px; background: var(--card); color: var(--card-ink); box-shadow: 0 2px 4px rgba(0,0,0,.5); display: flex; flex-direction: column; justify-content: space-between; padding: 4px 5px; font-family: var(--f-card); font-optical-sizing: auto; font-variant-numeric: lining-nums; user-select: none; flex: none; border: 0; }
 .card b { font-size: calc(var(--w) * 0.36); line-height: 1; font-weight: 700; letter-spacing: -.03em; }
 .card i { font-style: normal; font-size: calc(var(--w) * 0.5); line-height: 1; align-self: flex-end; font-family: var(--f-body); }

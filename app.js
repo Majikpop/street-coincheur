@@ -114,7 +114,7 @@ const S = {
   form: { name: '', tables: 2, perSet: 8 }, code: '',
   cur: null, doc: null, docLoaded: false,
   freeOpts: LS.get('sc_free', { target: 1000, moc: false }),
-  hands: null, revealed: null, pending: false, confirm: null, showHands: false, bidSel: { value: null, suit: null },
+  hands: null, revealed: null, pending: false, confirm: null, showHands: false, showLast: false, bidSel: { value: null, suit: null },
   trickKey: null, trickSeen: 0, pauseUntil: 0,
 };
 const subs = {};
@@ -277,8 +277,8 @@ function onDoc() {
   const d = S.doc, g = d && game(d);
   if (g) {
     const key = (d.kind === 'free' ? d.n : '') + ':' + g.idx;
-    if (S.trickKey !== key) { S.trickKey = key; S.trickSeen = g.tricks.length; S.pauseUntil = 0; S.showHands = false; S.bidSel = { value: null, suit: null }; }
-    else if (g.tricks.length > S.trickSeen) { S.trickSeen = g.tricks.length; S.pauseUntil = Date.now() + 1300; clearTimeout(pauseTimer); pauseTimer = setTimeout(() => { render(); scheduleBot(); }, 1320); }
+    if (S.trickKey !== key) { S.trickKey = key; S.trickSeen = g.tricks.length; S.pauseUntil = 0; S.showHands = false; S.showLast = false; S.bidSel = { value: null, suit: null }; }
+    else if (g.tricks.length > S.trickSeen) { S.trickSeen = g.tricks.length; S.showLast = false; S.pauseUntil = Date.now() + 1300; clearTimeout(pauseTimer); pauseTimer = setTimeout(() => { render(); scheduleBot(); }, 1320); }
     const mine = mySeats(d);
     const myTurn = d.status === 'playing' && g.phase !== 'done' && mine.includes(g.turn);
     if (myTurn && !wasMyTurn && mine.length === 1 && navigator.vibrate) { try { navigator.vibrate(60); } catch (e) {} }
@@ -562,6 +562,13 @@ function viewGame(d, title, backH) {
   const win = paused ? E.trickWinner(g.lastTrick, g.contract.suit) : null;
   const trick = `<div class="trick">${(shown || []).map(x => cardHTML(x.card, 't' + pos(x.seat) + (x.seat === win ? ' win' : ''))).join('')}</div>`;
   const contract = g.contract ? `<div class="contract">Contrat<br><b>${valTxt(g.contract.value)} ${sym(g.contract.suit)}</b> ${esc(seatName(d, g.contract.seat))}${g.contract.coinche > 1 ? `<br><span class="x2">${g.contract.coinche === 2 ? 'Coinché ×2' : 'Surcoinché ×4'}</span>` : ''}</div>` : '';
+  // Dernier pli ramassé, consultable par tout le monde (chacun de son côté, rien n'est partagé).
+  const last = g.phase === 'play' && !paused && g.tricks.length ? g.tricks[g.tricks.length - 1] : null;
+  const lastBtn = last ? `<button class="lastbtn ${S.showLast ? 'on' : ''}" data-a="lastPli" aria-pressed="${S.showLast}">Dernier pli</button>` : '';
+  const lastPts = last ? last.cards.reduce((a, x) => a + E.points(x.card, g.contract.suit), 0) : 0;
+  const lastBox = last && S.showLast ? `<button class="lastpli" data-a="lastPli" aria-label="Fermer le dernier pli">
+    <span class="lp-head">Pli ${g.tricks.length} · ${esc(seatName(d, last.winner))} · ${lastPts} pt${lastPts > 1 ? 's' : ''}</span>
+    <span class="trick">${last.cards.map(x => cardHTML(x.card, 't' + pos(x.seat) + (x.seat === last.winner ? ' win' : ''))).join('')}</span></button>` : '';
   const plis = g.phase !== 'bid' ? `<div class="plis">Plis<br><span class="a">NS ${tw[0]}</span> · <span class="b">EO ${tw[1]}</span></div>` : '';
 
   const canPlay = g.phase === 'play' && g.turn === viewer && mine.includes(viewer) && !paused && !cover && !busy();
@@ -582,7 +589,7 @@ function viewGame(d, title, backH) {
     ${hud(d, g, backH)}
     <div class="hudsub"><span>${ctx}</span>${d.kind === 'free' ? `<span>${d.moc ? '<b class="mocb">MOC</b> ' : ''}NS ${d.scores[0]} · EO ${d.scores[1]} / ${d.target}</span>` : ''}</div>
     ${S.err ? `<div class="gerr">${errBox()}</div>` : ''}
-    <div class="felt">${contract}${plis}${seats}${trick}</div>
+    <div class="felt">${contract}${plis}${seats}${trick}${lastBtn}${lastBox}</div>
     <div class="handzone">${hand}</div>
     <div class="panel">${panel(d, g, viewer, mine, paused, cover)}</div>
     ${cover ? `<div class="cover"><p class="eyebrow">${g.phase === 'bid' ? 'Enchères' : 'Jeu de la carte'}</p><h2>À ${esc(seatName(d, g.turn))} de jouer</h2>
@@ -745,6 +752,7 @@ $app.addEventListener('click', async e => {
     }
     case 'play': { const g = game(S.doc); const [r, s] = [d.c.slice(0, -1), d.c.slice(-1)]; act({ type: 'card', seat: g.turn, card: { r, s } }); break; }
     case 'toggleHands': S.showHands = !S.showHands; render(); break;
+    case 'lastPli': S.showLast = !S.showLast; render(); break;
   }
 });
 window.addEventListener('hashchange', route);
