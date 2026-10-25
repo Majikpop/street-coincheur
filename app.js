@@ -288,7 +288,7 @@ function viewHome() {
 
 function rulesBlock() {
   return `<details class="sheet rules"><summary>Règles et barème</summary><ul>
-    <li>32 cartes, jeu dans le sens inverse des aiguilles d'une montre. Atout : V 20, 9 14, A 11, 10 10, R 4, D 3. Hors atout : A 11, 10 10, R 4, D 3, V 2.</li>
+    <li>32 cartes, jeu dans le sens inverse des aiguilles d'une montre. Atout : J 20, 9 14, A 11, 10 10, K 4, Q 3. Hors atout : A 11, 10 10, K 4, Q 3, J 2. (J = valet, Q = dame, K = roi.)</li>
     <li>Enchères de 80 à 160 puis capot, à la couleur. Coinche par la défense, surcoinche par l'équipe preneuse.</li>
     <li>Fournir, couper si l'adversaire est maître, monter à l'atout, sous-couper faute de mieux. Partenaire maître : défausse libre.</li>
     <li>Contrat réussi si les points faits (belote comprise) atteignent l'annonce et au moins 82. Réussi : annonce + points faits. Chute : 160 + annonce pour la défense. Coinche ×2, surcoinche ×4. Belote +20, dix de der +10, capot 250.</li>

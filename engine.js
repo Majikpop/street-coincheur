@@ -4,7 +4,7 @@ const E = (() => {
   const SYM = { S: '♠', H: '♥', D: '♦', C: '♣' };
   const SUIT_NAME = { S: 'Pique', H: 'Cœur', D: 'Carreau', C: 'Trèfle' };
   const RANKS = ['7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
-  const RANK_FR = { '7': '7', '8': '8', '9': '9', '10': '10', J: 'V', Q: 'D', K: 'R', A: 'A' };
+  const RANK_FR = { '7': '7', '8': '8', '9': '9', '10': '10', J: 'J', Q: 'Q', K: 'K', A: 'A' };
   const TRUMP_ORD = ['7', '8', 'Q', 'K', '10', 'A', '9', 'J'];
   const PLAIN_ORD = ['7', '8', '9', 'J', 'Q', 'K', '10', 'A'];
   const TRUMP_PTS = { J: 20, '9': 14, A: 11, '10': 10, K: 4, Q: 3, '8': 0, '7': 0 };
