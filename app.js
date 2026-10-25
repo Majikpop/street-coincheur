@@ -126,7 +126,7 @@ function route() {
   const h = new URLSearchParams(location.hash.slice(1));
   S.err = ''; S.confirm = null;
   if (!h.has('t') || h.has('n')) { /* garder la souscription tournoi si on reste dedans */ }
-  unsub('table'); S.cur = null; S.doc = null; S.docLoaded = false; S.revealed = null; S.fxPrev = null;
+  unsub('table'); S.cur = null; S.doc = null; S.docLoaded = false; S.revealed = null; S.fxPrev = null; S.awaitRev = null;
   if (h.has('r')) openRoom(h.get('r').toUpperCase());
   else if (h.has('local')) openLocal();
   else if (h.has('t') && h.has('n')) { openTour(h.get('t')); openTable(NET, `tournaments/${h.get('t')}/tables/t${+h.get('n')}`, () => (S.tour ? T.initTour(S.tour, +h.get('n')) : null), { kind: 'tour', n: +h.get('n') }); }
@@ -515,7 +515,7 @@ function viewLobby(d, title, backH) {
     else if (s.uid) body = S.confirm === 'take' + i
       ? `<b>${esc(s.name)}</b><span class="small muted">Reprendre ce siège sur ce téléphone ?</span><span class="row"><button class="lnk" data-a="takeover" data-s="${i}">Oui</button><button class="lnk" data-a="confirm" data-c="">Non</button></span>`
       : `<b>${esc(s.name)}</b><button class="lnk" data-a="confirm" data-c="take${i}">C'est moi</button>`;
-    else body = `<button class="btn primary sm" data-a="sit" data-s="${i}">${mine.length ? 'Prendre aussi' : "S'asseoir"}</button><button class="lnk" data-a="bot" data-s="${i}">IA</button>`;
+    else body = `<button class="btn primary sm" data-a="sit" data-s="${i}" ${busy() ? 'disabled' : ''}>${mine.length ? 'Prendre aussi' : "S'asseoir"}</button><button class="lnk" data-a="bot" data-s="${i}" ${busy() ? 'disabled' : ''}>IA</button>`;
     const who = s.bot ? 'IA' : (s.name || '').trim().charAt(0).toUpperCase() || '?';
     return `<div class="sc s${i} t${i % 2} ${s.uid || s.bot ? 'taken' : ''}"><span class="eyebrow">${label}</span><span class="avatar ${s.uid || s.bot ? 'on' : ''}" aria-hidden="true">${s.uid || s.bot ? esc(who) : '?'}</span>${body}</div>`;
   };
@@ -678,12 +678,16 @@ function resultPanel(d, g, mine) {
 }
 
 /* ---------- Rendu global (préserve la saisie en cours) ---------- */
+let lastHtml = null;
 function render() {
   const a = document.activeElement, keep = a && a.id && a.tagName === 'INPUT' ? { id: a.id, s: a.selectionStart, e: a.selectionEnd } : null;
   const sc = window.scrollY;
   let html;
   if (S.view === 'table' && S.cur) html = viewTable();
   else html = ({ home: viewHome, create: viewCreate, tour: viewTour }[S.view] || viewHome)();
+  // Rien n'a changé : on garde le DOM tel quel, sinon un tap en cours sur un bouton remplacé est perdu.
+  if (html === lastHtml) return;
+  lastHtml = html;
   const wasGame = !!$app.querySelector('.game');
   $app.innerHTML = html;
   if (!wasGame && $app.querySelector('.game')) window.scrollTo(0, 0);
@@ -754,7 +758,7 @@ window.addEventListener('hashchange', route);
     try { NET = await makeOnline(cfg); S.net = 'online'; }
     catch (e) { NET = LOCAL; S.net = 'local'; S.err = 'Serveur injoignable (' + (e.code || e.message) + '). Mode hors ligne.'; }
   } else { NET = LOCAL; S.net = 'local'; }
-  if (NET.mode === 'online') subs.rooms = NET.watchCol('rooms', rs => { S.rooms = rs.filter(r => r.seats).sort((a, b) => roomActivity(b) - roomActivity(a)); render(); });
+  if (NET.mode === 'online') subs.rooms = NET.watchCol('rooms', rs => { S.rooms = rs.filter(r => r.seats).sort((a, b) => roomActivity(b) - roomActivity(a)); if (S.view === 'home') render(); });
   subs.tours = NET.watchCol('tournaments', ts => { S.tours = ts.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); render(); });
   route();
 })();
