@@ -274,7 +274,7 @@ function viewHome() {
       <div class="sheet pad stack">
         ${online ? `<p class="muted small">Créez une table, partagez le lien, chacun joue sur son téléphone. Les sièges vides peuvent être tenus par l'IA ou par un joueur déjà assis (passe-et-joue).</p>
         <button class="btn primary block" data-a="createRoom" ${S.busy ? 'disabled' : ''}>Créer une table en ligne</button>
-        <div class="row join"><input id="code" type="text" data-f="code" maxlength="4" placeholder="Code (ex. KQ7B)" value="${esc(S.code)}" aria-label="Code de table" autocapitalize="characters"><button class="btn" data-a="joinCode">Rejoindre</button></div>` : ''}
+        <div class="row join"><input id="code" type="text" data-f="code" maxlength="4" placeholder="CODE" value="${esc(S.code)}" aria-label="Code de table" autocapitalize="characters"><button class="btn" data-a="joinCode">Rejoindre</button></div>` : ''}
         <button class="btn ${online ? 'ghost' : 'primary'} block" data-a="go" data-h="local">Jouer sur ce téléphone</button>
       </div></section>
     <section class="section">
@@ -387,7 +387,9 @@ function viewTable() {
   if (!S.docLoaded || (!S.doc && c.kind === 'tour' && !S.tour)) return `<div class="wrap">${back('Retour', backH)}<p class="muted">Chargement de la table…</p></div>`;
   if (d && S.lobbyOnly && d.status === 'between') return viewLobby(d, title, backH);
   if (!d) return `<div class="wrap">${back('Retour', backH)}<h1>Table introuvable</h1><p class="muted">Vérifiez le code ou le lien reçu.</p></div>`;
-  if (d.status === 'playing' || (d.status === 'between' && d.game)) return viewGame(d, title, backH);
+  // Entre deux donnes, un joueur sans siège (ou une table incomplète) arrive sur la sélection des sièges, pas sur le résultat.
+  const seatedHere = mySeats(d).length > 0, fullTable = d.seats.every(s => s.uid || s.bot);
+  if (d.status === 'playing' || (d.status === 'between' && d.game && seatedHere && fullTable)) return viewGame(d, title, backH);
   return viewLobby(d, title, backH);
 }
 
@@ -485,7 +487,7 @@ function hud(d, g, backH) {
   const side = tm => {
     const w = Math.min(100, pts[tm] / 162 * 100);
     const goal = att === tm && g.contract.value <= 162 ? `<span class="goal" style="${tm === 0 ? 'left' : 'right'}:${g.contract.value / 162 * 100}%" title="Objectif ${g.contract.value}"></span>` : '';
-    return `<div class="side p${tm + 1}"><span class="tn">${esc(T.names(d, tm))}</span><div class="life" role="meter" aria-valuemin="0" aria-valuemax="162" aria-valuenow="${pts[tm]}" aria-label="${tm === 0 ? 'Nord-Sud' : 'Est-Ouest'}"><i style="width:${w}%"></i>${goal}</div>
+    return `<div class="side ${tm === 0 ? 'ns' : 'eo'}"><span class="tn">${esc(T.names(d, tm))}</span><div class="life" role="meter" aria-valuemin="0" aria-valuemax="162" aria-valuenow="${pts[tm]}" aria-label="${tm === 0 ? 'Nord-Sud' : 'Est-Ouest'}"><i style="width:${w}%"></i>${goal}</div>
       <span class="pts">${pts[tm]}${att === tm ? ' / ' + valTxt(g.contract.value) : ''}</span></div>`;
   };
   return `<header class="hud"><button class="quit" data-a="go" data-h="${esc(backH)}" aria-label="Quitter la table">‹</button>${side(0)}<span class="vs" aria-hidden="true">VS</span>${side(1)}</header>`;
@@ -567,7 +569,9 @@ function render() {
   let html;
   if (S.view === 'table' && S.cur) html = viewTable();
   else html = ({ home: viewHome, create: viewCreate, tour: viewTour }[S.view] || viewHome)();
+  const wasGame = !!$app.querySelector('.game');
   $app.innerHTML = html;
+  if (!wasGame && $app.querySelector('.game')) window.scrollTo(0, 0);
   document.body.classList.toggle('in-game', !!$app.querySelector('.game'));
   if (keep) { const el = document.getElementById(keep.id); if (el) { el.focus(); try { el.setSelectionRange(keep.s, keep.e); } catch (e) {} } }
   if (!$app.querySelector('.game')) window.scrollTo(0, sc);

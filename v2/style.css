@@ -146,14 +146,14 @@ input[type=text]::placeholder { color: var(--dim); }
 .hud .quit { background: var(--panel-2); border: 0; border-radius: 6px; width: 32px; height: 32px; font-family: var(--f-display); color: var(--muted); }
 .side { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .side .tn { font-family: var(--f-hud); font-size: .5rem; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; }
-.side.p1 .tn { color: var(--p1); } .side.p2 .tn { color: var(--p2); text-align: right; }
+.side.ns .tn { color: var(--p1); } .side.eo .tn { color: var(--p2); text-align: right; }
 .life { position: relative; height: 14px; background: #05061a; border: 2px solid #f3f1ff; border-radius: 2px; overflow: hidden; }
 .life i { position: absolute; top: 0; bottom: 0; transition: width .4s ease; }
-.side.p1 .life i { left: 0; background: linear-gradient(180deg, #ffd27a, var(--p1) 55%, var(--p1-deep)); }
-.side.p2 .life i { right: 0; background: linear-gradient(180deg, #b6ecff, var(--p2) 55%, var(--p2-deep)); }
+.side.ns .life i { left: 0; background: linear-gradient(180deg, #ffd27a, var(--p1) 55%, var(--p1-deep)); }
+.side.eo .life i { right: 0; background: linear-gradient(180deg, #b6ecff, var(--p2) 55%, var(--p2-deep)); }
 .life .goal { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--gold); box-shadow: 0 0 4px var(--gold); }
 .side .pts { font-family: var(--f-hud); font-size: .55rem; color: var(--ink); }
-.side.p2 .pts { text-align: right; }
+.side.eo .pts { text-align: right; }
 .hud .vs { font-size: 1.25rem; }
 .hudsub { display: flex; justify-content: space-between; gap: 10px; padding: 2px max(12px, env(safe-area-inset-right, 0px)) 8px max(12px, env(safe-area-inset-left, 0px)); font-family: var(--f-hud); font-size: .5rem; color: var(--muted); letter-spacing: .04em; background: var(--bg); }
 .hudsub span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -196,7 +196,7 @@ input[type=text]::placeholder { color: var(--dim); }
 .card.sm { --w: 30px; padding: 2px 3px; border-radius: 4px; }
 .handzone { background: var(--bg); padding-block: 14px 6px; padding-left: max(8px, env(safe-area-inset-left, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px)); }
 .hand { display: flex; justify-content: center; }
-.hand .card { --w: min(15vw, 62px); margin-left: calc(var(--w) * -0.18); transition: transform .12s ease; }
+.hand .card { --w: min(13.4vw, 62px); margin-left: calc(var(--w) * -0.2); transition: transform .12s ease; }
 .hand .card:first-child { margin-left: 0; }
 .hand.mine .card.ok { transform: translateY(-12px); box-shadow: 0 0 0 2px var(--gold), 0 6px 12px rgba(0,0,0,.5); }
 .hand.mine .card.no { filter: brightness(.5) saturate(.6); }

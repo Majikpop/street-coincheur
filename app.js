@@ -345,7 +345,9 @@ function viewTable() {
   if (!S.docLoaded || (!S.doc && c.kind === 'tour' && !S.tour)) return `<div class="wrap">${back('Retour', backH)}<p class="muted">Chargement de la table…</p></div>`;
   if (d && S.lobbyOnly && d.status === 'between') return viewLobby(d, title, backH);
   if (!d) return `<div class="wrap">${back('Retour', backH)}<h1>Table introuvable</h1><p class="muted">Vérifiez le code ou le lien reçu.</p></div>`;
-  if (d.status === 'playing' || (d.status === 'between' && d.game)) return viewGame(d, title, backH);
+  // Entre deux donnes, un joueur sans siège (ou une table incomplète) arrive sur la sélection des sièges, pas sur le résultat.
+  const seatedHere = mySeats(d).length > 0, fullTable = d.seats.every(s => s.uid || s.bot);
+  if (d.status === 'playing' || (d.status === 'between' && d.game && seatedHere && fullTable)) return viewGame(d, title, backH);
   return viewLobby(d, title, backH);
 }
 
