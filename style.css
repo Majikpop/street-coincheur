@@ -10,6 +10,9 @@
   --f-display: "Bungee", "Arial Black", Impact, sans-serif;
   --f-hud: "Press Start 2P", ui-monospace, Menlo, monospace;
   --f-body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* En jeu : chiffres et points nets, cartes en serif classique. */
+  --f-game: "Barlow Semi Condensed", "Atkinson Hyperlegible", system-ui, sans-serif;
+  --f-card: "Fraunces", Georgia, "Times New Roman", serif;
   color-scheme: dark;
 }
 html { box-sizing: border-box; height: 100%; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); background: var(--bg); }
@@ -151,17 +154,17 @@ input[type=text]::placeholder { color: var(--dim); }
 .hud { display: grid; grid-template-columns: auto 1fr auto 1fr; align-items: center; gap: 8px; padding-left: max(10px, env(safe-area-inset-left, 0px)); padding-right: max(10px, env(safe-area-inset-right, 0px)); padding-block: 10px 4px; background: var(--bg); }
 .hud .quit { background: var(--panel-2); border: 0; border-radius: 6px; width: 32px; height: 32px; font-family: var(--f-display); color: var(--muted); }
 .side { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.side .tn { font-family: var(--f-hud); font-size: .5rem; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; }
+.side .tn { font-family: var(--f-game); font-weight: 600; font-size: .8rem; letter-spacing: .06em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; }
 .side.ns .tn { color: var(--p1); } .side.eo .tn { color: var(--p2); text-align: right; }
 .life { position: relative; height: 14px; background: #05061a; border: 2px solid #f3f1ff; border-radius: 2px; overflow: hidden; }
 .life i { position: absolute; top: 0; bottom: 0; transition: width .4s ease; }
 .side.ns .life i { left: 0; background: linear-gradient(180deg, #ffd27a, var(--p1) 55%, var(--p1-deep)); }
 .side.eo .life i { right: 0; background: linear-gradient(180deg, #b6ecff, var(--p2) 55%, var(--p2-deep)); }
 .life .goal { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--gold); box-shadow: 0 0 4px var(--gold); }
-.side .pts { font-family: var(--f-hud); font-size: .55rem; color: var(--ink); }
+.side .pts { font-family: var(--f-game); font-weight: 700; font-size: 1.05rem; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; }
 .side.eo .pts { text-align: right; }
 .hud .vs { font-size: 1.25rem; }
-.hudsub { display: flex; justify-content: space-between; gap: 10px; padding: 2px max(12px, env(safe-area-inset-right, 0px)) 8px max(12px, env(safe-area-inset-left, 0px)); font-family: var(--f-hud); font-size: .5rem; color: var(--muted); letter-spacing: .04em; background: var(--bg); }
+.hudsub { display: flex; justify-content: space-between; gap: 10px; padding: 2px max(12px, env(safe-area-inset-right, 0px)) 8px max(12px, env(safe-area-inset-left, 0px)); font-family: var(--f-game); font-weight: 500; font-size: .85rem; color: var(--muted); letter-spacing: .02em; font-variant-numeric: tabular-nums; background: var(--bg); }
 .hudsub span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .felt { flex: none; height: 44vh; height: clamp(250px, 44dvh, 440px); position: relative; overflow: hidden; border-block: 3px solid #05061a;
   background: radial-gradient(ellipse at 50% 45%, color-mix(in srgb, var(--felt) 82%, white) 0%, var(--felt) 55%, var(--felt-2) 100%); }
@@ -170,7 +173,7 @@ input[type=text]::placeholder { color: var(--dim); }
 .seat.t0 .nm { border-bottom-color: var(--p1); } .seat.t1 .nm { border-bottom-color: var(--p2); }
 .seat.turn .nm { background: var(--gold); color: #261700; animation: pulse 1s ease-in-out infinite alternate; }
 @keyframes pulse { to { box-shadow: 0 0 0 4px rgba(255,201,60,.35); } }
-.seat .bub { font-family: var(--f-hud); font-size: .55rem; background: var(--card); color: var(--card-ink); padding: 4px 7px; border-radius: 4px; }
+.seat .bub { font-family: var(--f-game); font-weight: 700; font-size: .9rem; font-variant-numeric: tabular-nums; background: var(--card); color: var(--card-ink); padding: 4px 7px; border-radius: 4px; }
 .seat .bub.pass { background: rgba(5,6,26,.5); color: var(--felt-muted); font-family: var(--f-body); font-size: .75rem; }
 .seat .bub.hot { background: var(--hot); color: #fff; }
 .seat .bub .red { color: var(--card-red); }
@@ -182,10 +185,10 @@ input[type=text]::placeholder { color: var(--dim); }
 .backs { display: flex; }
 .backs i { width: 10px; height: 16px; border-radius: 2px; background: repeating-linear-gradient(45deg, #2a2f7a 0 3px, #3c43a3 3px 6px); border: 1px solid rgba(255,255,255,.7); margin-left: -4px; }
 .contract { position: absolute; top: 10px; left: 10px; font-size: 0.6875rem; background: rgba(5,6,26,.6); padding: 6px 9px; border-radius: 6px; line-height: 1.4; border-left: 3px solid var(--gold); }
-.contract b { font-family: var(--f-hud); font-size: .7rem; }
+.contract b { font-family: var(--f-game); font-weight: 700; font-variant-numeric: tabular-nums; }
 .contract .red { color: #ff8a90; }
 .contract .x2 { color: var(--hot); font-family: var(--f-display); text-transform: uppercase; }
-.plis { position: absolute; top: 10px; right: 10px; font-size: 0.6875rem; background: rgba(5,6,26,.6); padding: 6px 9px; border-radius: 6px; font-family: var(--f-hud); font-size: .5rem; text-align: right; line-height: 1.9; }
+.plis { position: absolute; top: 10px; right: 10px; font-size: 0.6875rem; background: rgba(5,6,26,.6); padding: 6px 9px; border-radius: 6px; font-family: var(--f-game); font-weight: 600; font-size: .85rem; text-align: right; line-height: 1.35; font-variant-numeric: tabular-nums; }
 .plis .a { color: var(--p1); } .plis .b { color: var(--p2); }
 .trick { position: absolute; left: 50%; top: 50%; width: 150px; height: 150px; transform: translate(-50%, -50%); }
 .trick .card { position: absolute; animation: slam .16s ease-out; }
@@ -195,8 +198,8 @@ input[type=text]::placeholder { color: var(--dim); }
 .trick .t3 { left: 0; top: 50%; translate: 0 -50%; rotate: -6deg; }
 .trick .win { box-shadow: 0 0 0 3px var(--gold), 0 0 16px var(--gold); }
 @keyframes slam { from { scale: 1.35; opacity: .2; } }
-.card { --w: 50px; width: var(--w); height: calc(var(--w) * 1.42); border-radius: 6px; background: var(--card); color: var(--card-ink); box-shadow: 0 2px 4px rgba(0,0,0,.5); display: flex; flex-direction: column; justify-content: space-between; padding: 4px 5px; font-family: var(--f-display); user-select: none; flex: none; border: 0; }
-.card b { font-size: calc(var(--w) * 0.34); line-height: 1; font-weight: 400; }
+.card { --w: 50px; width: var(--w); height: calc(var(--w) * 1.42); border-radius: 6px; background: var(--card); color: var(--card-ink); box-shadow: 0 2px 4px rgba(0,0,0,.5); display: flex; flex-direction: column; justify-content: space-between; padding: 4px 5px; font-family: var(--f-card); font-optical-sizing: auto; font-variant-numeric: lining-nums; user-select: none; flex: none; border: 0; }
+.card b { font-size: calc(var(--w) * 0.36); line-height: 1; font-weight: 700; letter-spacing: -.03em; }
 .card i { font-style: normal; font-size: calc(var(--w) * 0.5); line-height: 1; align-self: flex-end; font-family: var(--f-body); }
 .card.red { color: var(--card-red); }
 .card.sm { --w: 30px; padding: 2px 3px; border-radius: 4px; }
@@ -208,9 +211,9 @@ input[type=text]::placeholder { color: var(--dim); }
 .hand.mine .card.no { filter: brightness(.5) saturate(.6); }
 .hand.hidden { color: var(--muted); font-size: 0.875rem; padding-block: 18px; text-align: center; }
 .panel { background: var(--panel); color: var(--ink); border-top: 3px solid var(--line); padding-block: 14px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 10px; flex: 1; padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px)); }
-.status { font-family: var(--f-display); text-transform: uppercase; font-size: .95rem; }
+.status { font-family: var(--f-game); font-weight: 700; text-transform: uppercase; letter-spacing: .03em; font-size: 1.1rem; line-height: 1.2; text-wrap: pretty; font-variant-numeric: tabular-nums; }
 .vals { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
-.vals button, .suits button { border: 2px solid var(--line); background: var(--bg-2); border-radius: 7px; padding: 10px 0; font-family: var(--f-hud); font-size: .6rem; }
+.vals button, .suits button { border: 2px solid var(--line); background: var(--bg-2); border-radius: 7px; padding: 8px 0; font-family: var(--f-game); font-weight: 700; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
 .vals button.on, .suits button.on { background: var(--gold); color: #261700; border-color: var(--gold); }
 .suits { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .suits button { font-size: 1.5rem; padding: 4px 0; font-family: var(--f-body); background: var(--card); color: var(--card-ink); border-color: var(--card); }
@@ -225,14 +228,17 @@ input[type=text]::placeholder { color: var(--dim); }
 .scoreline { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .scoreline > div { background: var(--bg-2); border-radius: 8px; padding: 10px 12px; border-top: 4px solid var(--p1); }
 .scoreline > div + div { border-top-color: var(--p2); }
-.scoreline .big { font-family: var(--f-hud); font-size: 1.1rem; margin-block: 6px; }
+.scoreline .big { font-family: var(--f-game); font-weight: 700; font-size: 2.2rem; line-height: 1; margin-block: 4px; font-variant-numeric: tabular-nums; }
 .hands4 { display: grid; gap: 8px; }
 .hands4 .h { display: flex; align-items: center; gap: 8px; }
-.hands4 .h > span { width: 46px; font-family: var(--f-hud); font-size: .5rem; color: var(--muted); flex: none; }
+.hands4 .h > span { width: 46px; font-family: var(--f-game); font-weight: 600; font-size: .8rem; color: var(--muted); flex: none; }
 .hands4 .cs { display: flex; flex-wrap: wrap; gap: 3px; }
 .cover { position: fixed; inset: 0; z-index: 30; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; text-align: center; padding: 24px max(24px, env(safe-area-inset-right, 0px)) 24px max(24px, env(safe-area-inset-left, 0px)); }
 .cover h2 { font-size: 1.8rem; color: var(--ink); }
 .gerr { padding: 0 12px 8px; background: var(--bg); }
+
+/* Chiffres des tableaux de résultat en jeu */
+.game .num { font-family: var(--f-game); font-weight: 700; font-size: 1em; }
 
 /* ---- Annonces plein écran ---- */
 #fx { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; pointer-events: none; }
@@ -243,7 +249,7 @@ input[type=text]::placeholder { color: var(--dim); }
 #fx.hot .fx-main { background-image: linear-gradient(180deg, #ffd0d6 0%, #ff6b7f 40%, var(--hot) 70%, #8c0018 100%); }
 #fx.cool .fx-main { background-image: linear-gradient(180deg, #e3f8ff 0%, #8fdcff 40%, var(--p2) 70%, #08508a 100%); }
 #fx.good .fx-main { background-image: linear-gradient(180deg, #e6ffef 0%, #8ff0b8 40%, var(--ok) 70%, #0b7a3c 100%); }
-#fx .fx-sub { font-family: var(--f-hud); font-size: .65rem; letter-spacing: .08em; color: var(--ink); background: rgba(5,6,26,.75); padding: 8px 12px; border-radius: 4px; text-align: center; max-width: 86vw; line-height: 1.6; }
+#fx .fx-sub { font-family: var(--f-game); font-weight: 700; font-size: 1.15rem; letter-spacing: .04em; font-variant-numeric: tabular-nums; color: var(--ink); background: rgba(5,6,26,.75); padding: 8px 12px; border-radius: 4px; text-align: center; max-width: 86vw; line-height: 1.6; }
 #fx.show .fx-in { animation: fx-in 1.5s cubic-bezier(.2,.9,.3,1.2) forwards; }
 @keyframes fx-in {
   0% { opacity: 0; transform: skewX(-9deg) scale(2.4); }
@@ -266,21 +272,21 @@ input[type=text]::placeholder { color: var(--dim); }
 /* ---- Symboles de couleur bien lisibles partout ---- */
 .suit { font-family: "Atkinson Hyperlegible", system-ui, sans-serif; font-size: 1.55em; line-height: 0; vertical-align: -0.16em; font-weight: 700; }
 .suit.red { color: var(--card-red); }
-.seat .bub { font-size: .75rem; padding: 6px 9px; border-radius: 5px; display: inline-flex; align-items: center; gap: 4px; }
+.seat .bub { font-size: .9rem; padding: 5px 9px; border-radius: 5px; display: inline-flex; align-items: center; gap: 4px; }
 .seat .bub .suit { font-size: 1.7em; }
 .seat .bub.pass .suit, .contract .suit.blk { color: #fff; }
 .contract { font-size: .75rem; }
-.contract b { font-size: .8rem; display: inline-flex; align-items: center; gap: 4px; }
+.contract b { font-size: 1.05rem; display: inline-flex; align-items: center; gap: 4px; }
 .contract .suit { font-size: 1.9em; }
 .contract .suit.red { color: #ff5a64; text-shadow: 0 0 1px #fff; }
 .status .suit, .muted .suit, .small .suit { font-size: 1.35em; }
 .status .suit.red { color: #ff5a64; }
 
-.suit.tx { font-family: var(--f-hud); font-size: .8em; vertical-align: 0; letter-spacing: .02em; color: var(--gold); }
+.suit.tx { font-family: var(--f-game); font-weight: 700; font-size: .95em; vertical-align: 0; letter-spacing: .03em; color: var(--gold); }
 .seat .bub .suit.tx { font-size: .95em; color: #7a4b00; }
 .contract .suit.tx { font-size: 1em; color: var(--gold); }
 .suits { grid-template-columns: repeat(6, 1fr); }
-.suits button.tx { font-family: var(--f-hud); font-size: .6rem; }
+.suits button.tx { font-family: var(--f-game); font-weight: 700; font-size: 1.05rem; }
 
 /* ---- Options de partie libre ---- */
 .opts { display: flex; flex-direction: column; gap: 12px; padding-bottom: 6px; border-bottom: 2px dashed var(--line); }
