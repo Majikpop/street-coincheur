@@ -251,3 +251,9 @@ body.in-game { overflow: hidden; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
   #fx.show .fx-in { opacity: 1; }
 }
+
+/* ---- Affiche d'accueil ---- */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.poster { margin-inline: calc(-1 * max(16px, env(safe-area-inset-left, 0px))); }
+.poster svg { display: block; width: 100%; height: auto; max-width: 100%; }
+@media (min-width: 600px) { .poster { margin-inline: 0; } .poster svg { border-radius: 12px; border: 2px solid var(--line); } }

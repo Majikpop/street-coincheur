@@ -265,7 +265,7 @@ function viewHome() {
       <span class="chev" aria-hidden="true">›</span></button>`).join('');
   const online = S.net === 'online';
   return `<div class="wrap">
-    <header class="stack" style="gap:14px"><h1 class="logo" aria-label="Street Coincheur"><span class="l1">Street</span><span class="l2">Coincheur</span></h1>
+    <header class="stack" style="gap:14px">${window.SC_POSTER ? `<h1 class="sr-only">Street Coincheur</h1><div class="poster">${window.SC_POSTER}</div>` : '<h1 class="logo" aria-label="Street Coincheur"><span class="l1">Street</span><span class="l2">Coincheur</span></h1>'}
       <p class="tagline">La belote coinchée entre amis, à une table ou en donnes duplicate.</p>
       ${S.name ? '' : '<p class="insert" aria-hidden="true">Insérez un prénom pour jouer</p>'}</header>
     ${errBox()}
