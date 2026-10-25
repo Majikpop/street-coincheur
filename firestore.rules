@@ -1,8 +1,36 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    function signedIn() { return request.auth != null; }
+    function seated(t) { return request.auth.uid in [t.seats[0].uid, t.seats[1].uid, t.seats[2].uid, t.seats[3].uid]; }
+    // Main <donne>-<siège> : lisible pendant la donne en cours par le joueur de ce siège,
+    // ou par un joueur assis s'il s'agit d'un siège IA (les téléphones des joueurs font jouer l'IA).
+    function canSee(t, hand) {
+      let k = hand.split('-');
+      let s = t.seats[int(k[1])];
+      return t.hk == k[0] && (s.uid == request.auth.uid || (s.bot && seated(t)));
+    }
+
+    match /rooms/{code} {
+      allow read, write: if signedIn();
+      match /hands/{hand} {
+        allow get: if signedIn() && canSee(get(/databases/$(database)/documents/rooms/$(code)).data, hand);
+        // écrites par le joueur qui distribue, dans la transaction de la donne ; jamais modifiées
+        allow create: if signedIn() && seated(getAfter(/databases/$(database)/documents/rooms/$(code)).data);
+      }
+    }
+
+    match /tournaments/{tid} {
+      allow read, write: if signedIn();
+      match /results/{r} { allow read, write: if signedIn(); }
+      match /tables/{tn} {
+        allow read, write: if signedIn();
+        match /hands/{hand} {
+          allow get: if signedIn() && canSee(get(/databases/$(database)/documents/tournaments/$(tid)/tables/$(tn)).data, hand);
+          // écrites par l'organisateur à la création du tournoi ; jamais modifiées
+          allow create: if signedIn() && get(/databases/$(database)/documents/tournaments/$(tid)).data.owner == request.auth.uid;
+        }
+      }
     }
   }
 }

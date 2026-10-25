@@ -14,7 +14,7 @@ Site statique (HTML/JS, sans compilation) + Firebase (Firestore + connexion anon
 1. https://console.firebase.google.com → **Ajouter un projet** (ex. `street-coincheur`), Google Analytics inutile.
 2. **Build → Authentication → Commencer → Sign-in method → Anonyme → Activer.**
 3. **Build → Firestore Database → Créer une base de données** → emplacement `eur3 (europe)` → mode **production**.
-4. Onglet **Règles** de Firestore : coller le contenu de `firestore.rules`, puis **Publier**.
+4. Onglet **Règles** de Firestore : coller le contenu de `firestore.rules`, puis **Publier**. À refaire à chaque modification de ce fichier.
 5. **Paramètres du projet (roue dentée) → Vos applications → icône Web `</>`** → nom `web` (pas besoin de Firebase Hosting) → copier l'objet `firebaseConfig` dans `config.js`.
 6. **Authentication → Paramètres → Domaines autorisés → Ajouter** : `majikpop.github.io`.
 
@@ -40,4 +40,10 @@ Aucune dépendance, Node 18 ou plus : `npm test` (ou `node --test`).
 ## Limites connues (V1 pilote)
 - Pas d'annonces de carrés ou suites (enchères à la couleur, sans atout et tout atout disponibles).
 - Pas de comptes joueurs : identité anonyme par téléphone + prénom. Un joueur qui change de téléphone reprend son siège avec « C'est moi ».
-- Les mains sont dans la base partagée : un joueur bricoleur pourrait les lire. Acceptable entre amis, à revoir avant une diffusion large.
+- Mains privées sans serveur : chaque main est un document à part que seul son joueur peut lire (règles Firestore). Restent possibles pour un bricoleur qui modifie le code :
+  - le téléphone qui distribue (partie libre) ou l'organisateur qui crée le tournoi voit passer les quatre jeux ;
+  - un joueur assis peut lire les mains de l'IA (ce sont les téléphones des joueurs qui la font jouer) ;
+  - « C'est moi » permet de prendre un siège en cours de donne, donc sa main (visible de toute la table) ;
+  - la validité des coups est vérifiée par le téléphone du joueur, pas par un arbitre.
+
+  Pour aller au-delà : faire distribuer et arbitrer par un serveur (Cloud Functions, formule Blaze).
