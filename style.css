@@ -275,3 +275,16 @@ input[type=text]::placeholder { color: var(--dim); }
 .contract .suit.tx { font-size: 1em; color: var(--gold); }
 .suits { grid-template-columns: repeat(6, 1fr); }
 .suits button.tx { font-family: var(--f-hud); font-size: .6rem; }
+
+/* ---- Options de partie libre ---- */
+.opts { display: flex; flex-direction: column; gap: 12px; padding-bottom: 6px; border-bottom: 2px dashed var(--line); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { border: 2px solid var(--line); background: var(--bg-2); color: var(--ink); border-radius: 7px; padding: 8px 14px; font-family: var(--f-hud); font-size: .6rem; }
+.chip.on { background: var(--gold); color: #261700; border-color: var(--gold); }
+.moc { display: flex; gap: 12px; align-items: flex-start; text-align: left; background: var(--bg-2); border: 2px solid var(--line); border-radius: 9px; padding: 12px; color: var(--ink); line-height: 1.45; }
+.moc.on { border-color: var(--hot); background: color-mix(in srgb, var(--hot) 16%, var(--bg-2)); }
+.moc b { font-family: var(--f-display); font-weight: 400; text-transform: uppercase; color: var(--hot); }
+.mbox { flex: none; width: 24px; height: 24px; border-radius: 5px; border: 2px solid var(--line); display: grid; place-items: center; font-weight: 700; background: var(--bg); }
+.moc.on .mbox { background: var(--hot); border-color: var(--hot); color: #fff; }
+.mocline { font-family: var(--f-display); text-transform: uppercase; color: var(--hot); font-size: .85rem; }
+.mocb { font-family: var(--f-hud); font-weight: 400; color: var(--hot); }

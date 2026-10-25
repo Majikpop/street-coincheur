@@ -78,12 +78,12 @@ const E = (() => {
   }
 
   // --- état d'une donne ---
-  function newGame(deal) {
+  function newGame(deal, opts = {}) {
     const first = next(deal.dealer);
     return {
       idx: deal.idx, dealer: deal.dealer, hands: deal.hands.map(h => h.slice()), initialHands: deal.hands.map(h => h.slice()),
       phase: 'bid', turn: first, bids: [], contract: null, passes: 0, surQueue: null,
-      trick: [], leader: first, tricks: [], played: [], beloteSeat: null, beloteSaid: 0, result: null,
+      trick: [], leader: first, tricks: [], played: [], beloteSeat: null, beloteSaid: 0, result: null, moc: !!opts.moc,
     };
   }
 
@@ -94,6 +94,9 @@ const E = (() => {
     const cur = g.contract ? g.contract.value : 0;
     o.values = BID_VALUES.filter(v => v > cur);
     if (g.contract && team(g.contract.seat) !== team(seat)) o.coinche = true;
+    // MOC (« Monte ou Coinche ») : personne ne passe, dès l'entame ; seule issue : la coinche
+    // (exception : capot annoncé par son partenaire, ni surenchère ni coinche possibles)
+    if (g.moc && (o.values.length || o.coinche)) o.pass = false;
     return o;
   }
 
@@ -108,6 +111,7 @@ const E = (() => {
       g.turn = g.surQueue[0]; return g;
     }
     if (bid.type === 'pass') {
+      if (!opts.pass) throw new Error('MOC : surenchérissez ou coinchez');
       g.passes++;
       if (!g.contract && g.passes === 4) { g.phase = 'done'; g.result = scoreDeal(g); return g; }
       if (g.contract && g.passes === 3) return startPlay(g);
@@ -228,6 +232,19 @@ const E = (() => {
   }
 
   function botBid(g, seat) {
+    const d = botBidNormal(g, seat), opts = legalBidOptions(g, seat);
+    if (d.type !== 'pass' || opts.pass) return d;
+    // MOC : monter d'un cran si la main tient (toujours face à son partenaire), sinon coincher
+    const cur = g.contract, v = opts.values[0], hand = g.hands[seat];
+    const ranked = SUITS.map(s => ({ s, e: evalSuit(hand, s) })).sort((a, b) => b.e.est - a.e.est)[0];
+    const withPartner = cur && cur.seat === partner(seat);
+    if (v !== undefined && (!opts.coinche || withPartner || (v <= 130 && ranked.e.est >= 70 + (v - 80)))) {
+      return { type: 'bid', value: v, suit: withPartner ? cur.suit : ranked.s };
+    }
+    return opts.coinche ? { type: 'coinche' } : { type: 'bid', value: v, suit: ranked.s };
+  }
+
+  function botBidNormal(g, seat) {
     const opts = legalBidOptions(g, seat);
     if (g.surQueue) return { type: 'pass' };
     const hand = g.hands[seat], cur = g.contract;

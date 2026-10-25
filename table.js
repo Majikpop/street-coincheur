@@ -14,9 +14,9 @@ const T = (() => {
       round: 0, doneDeals: [], status: 'lobby', game: null, rev: 0, at: 0,
     };
   }
-  function initFree(code, seed) {
+  function initFree(code, seed, opts = {}) {
     return {
-      kind: 'free', code, seed, n: 0, scores: [0, 0], target: 1000,
+      kind: 'free', code, seed, n: 0, scores: [0, 0], target: opts.target || 1000, moc: !!opts.moc,
       seats: [EMPTY(), EMPTY(), EMPTY(), EMPTY()],
       status: 'lobby', game: null, rev: 0, at: 0,
     };
@@ -42,7 +42,7 @@ const T = (() => {
   function deal(d) {
     if (d.kind === 'free') {
       if (Math.max(...d.scores) >= d.target) d.scores = [0, 0];
-      d.game = JSON.stringify(E.newGame(E.makeDeal(d.seed, d.n)));
+      d.game = JSON.stringify(E.newGame(E.makeDeal(d.seed, d.n), { moc: d.moc }));
       d.n++;
     } else {
       const nx = nextDealIdx(d);
