@@ -757,6 +757,31 @@ $app.addEventListener('click', async e => {
 });
 window.addEventListener('hashchange', route);
 
+/* ---------- Mise à jour de l'app ----------
+   Lancée depuis l'écran d'accueil, l'app reprend souvent la page gardée en mémoire au lieu de la recharger :
+   on relit index.html sans cache et on compare son numéro de version (?v=) à celui des scripts chargés. */
+const MY_VER = ((document.querySelector('script[src*="app.js?v="]') || {}).src || '').split('v=')[1] || '';
+let verChecked = 0, verPending = false;
+async function checkVersion() {
+  if (!MY_VER || verPending || Date.now() - verChecked < 60000) return;
+  verChecked = Date.now();
+  try {
+    const html = await (await fetch('./?nv=' + Date.now(), { cache: 'no-store' })).text();
+    const m = html.match(/app\.js\?v=([\w.-]+)/);
+    if (!m || m[1] === MY_VER) return;
+    verPending = true;
+    // Hors partie on recharge tout de suite ; en pleine donne on propose, pour ne pas couper un coup.
+    if (!document.body.classList.contains('in-game')) return location.reload();
+    const b = document.createElement('button');
+    b.className = 'upd'; b.textContent = 'Nouvelle version · Mettre à jour';
+    b.onclick = () => location.reload();
+    document.body.appendChild(b);
+  } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkVersion(); });
+window.addEventListener('pageshow', e => { if (e.persisted) checkVersion(); });
+setInterval(checkVersion, 10 * 60000);
+
 /* ---------- Démarrage ---------- */
 (async function boot() {
   LOCAL = makeLocal();
@@ -769,4 +794,5 @@ window.addEventListener('hashchange', route);
   if (NET.mode === 'online') subs.rooms = NET.watchCol('rooms', rs => { S.rooms = rs.filter(r => r.seats).sort((a, b) => roomActivity(b) - roomActivity(a)); if (S.view === 'home') render(); });
   subs.tours = NET.watchCol('tournaments', ts => { S.tours = ts.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); render(); });
   route();
+  checkVersion();
 })();

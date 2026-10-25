@@ -306,3 +306,6 @@ input[type=text]::placeholder { color: var(--dim); }
 .moc.on .mbox { background: var(--hot); border-color: var(--hot); color: #fff; }
 .mocline { font-family: var(--f-display); text-transform: uppercase; color: var(--hot); font-size: .85rem; }
 .mocb { font-family: var(--f-hud); font-weight: 400; color: var(--hot); }
+
+/* ---- Nouvelle version disponible ---- */
+.upd { position: fixed; z-index: 50; left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); border: 0; border-radius: 8px; padding: 10px 16px; background: var(--gold); color: #261700; font-family: var(--f-game); font-weight: 700; font-size: .95rem; letter-spacing: .03em; text-transform: uppercase; box-shadow: 0 4px 14px rgba(0,0,0,.5); white-space: nowrap; }
