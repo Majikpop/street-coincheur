@@ -134,11 +134,8 @@ const E = (() => {
   function startPlay(g) {
     g.phase = 'play'; g.surQueue = null;
     g.leader = next(g.dealer); g.turn = g.leader;
-    const t = g.contract.suit;
-    for (let p = 0; p < 4; p++) {
-      if (SUITS.includes(t) && g.hands[p].some(c => c.s === t && c.r === 'K') && g.hands[p].some(c => c.s === t && c.r === 'Q')) g.beloteSeat = p;
-      g.hands[p] = sortHand(g.hands[p], t);
-    }
+    // seules les mains connues de ce téléphone sont présentes ; la belote se déclare quand la carte est jouée
+    for (let p = 0; p < 4; p++) if (g.hands[p]) g.hands[p] = sortHand(g.hands[p], g.contract.suit);
     return g;
   }
 
@@ -172,11 +169,15 @@ const E = (() => {
   function playCard(g, seat, card) {
     if (g.phase !== 'play' || g.turn !== seat) throw new Error('Pas votre tour');
     if (!legalCards(g, seat).some(c => sameCard(c, card))) throw new Error('Carte interdite');
+    const t = g.contract.suit;
+    if (SUITS.includes(t) && card.s === t && (card.r === 'K' || card.r === 'Q')) {
+      const other = card.r === 'K' ? 'Q' : 'K';
+      if (g.beloteSeat === seat) g.beloteSaid++;
+      else if (g.beloteSeat === null && g.hands[seat].some(c => c.s === t && c.r === other)) { g.beloteSeat = seat; g.beloteSaid = 1; }
+    }
     g.hands[seat] = g.hands[seat].filter(c => !sameCard(c, card));
     g.trick.push({ seat, card });
     g.played.push(card);
-    const t = g.contract.suit;
-    if (seat === g.beloteSeat && card.s === t && (card.r === 'K' || card.r === 'Q')) g.beloteSaid++;
     if (g.trick.length < 4) { g.turn = next(seat); return { trickDone: false }; }
     const w = trickWinner(g.trick, t);
     g.tricks.push({ cards: g.trick, winner: w });

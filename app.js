@@ -34,7 +34,9 @@ function makeLocal() {
     mode: 'local', uid: 'moi',
     watchDoc: (p, cb) => sub(p, cb),
     watchCol: (p, cb) => sub(p + '/*', cb),
+    async get(p) { return data[p] ? clone(data[p]) : null; },
     async set(p, v) { data[p] = clone(v); save(); },
+    async setMany(ws) { for (const w of ws) data[w.path] = clone(w.data); save(); },
     async create(p, v) { if (data[p]) return false; data[p] = clone(v); save(); return true; },
     async act(p, init, a) {
       const cur = data[p] || (init && init()); if (!cur) return 'Table introuvable';
@@ -63,7 +65,15 @@ async function makeOnline(cfg) {
     mode: 'online', uid: user.uid,
     watchDoc: (p, cb) => F.onSnapshot(F.doc(db, p), s => cb(s.exists() ? s.data() : null), onErr),
     watchCol: (p, cb) => F.onSnapshot(F.collection(db, p), s => cb(s.docs.map(d => ({ ...d.data(), id: d.id }))), onErr),
+    get: p => F.getDoc(F.doc(db, p)).then(s => (s.exists() ? s.data() : null)),
     set: (p, v) => F.setDoc(F.doc(db, p), v),
+    async setMany(ws) {
+      for (let i = 0; i < ws.length; i += 400) {
+        const b = F.writeBatch(db);
+        for (const w of ws.slice(i, i + 400)) b.set(F.doc(db, w.path), w.data);
+        await b.commit();
+      }
+    },
     create: (p, v) => F.runTransaction(db, async tx => {
       const ref = F.doc(db, p); const s = await tx.get(ref);
       if (s.exists()) return false; tx.set(ref, v); return true;
@@ -94,7 +104,7 @@ const S = {
   form: { name: '', tables: 2, perSet: 8 }, code: '',
   cur: null, doc: null, docLoaded: false,
   freeOpts: LS.get('sc_free', { target: 1000, moc: false }),
-  revealed: null, pending: false, confirm: null, showHands: false, bidSel: { value: null, suit: null },
+  hands: null, revealed: null, pending: false, confirm: null, showHands: false, bidSel: { value: null, suit: null },
   trickKey: null, trickSeen: 0, pauseUntil: 0,
 };
 const subs = {};
@@ -129,8 +139,8 @@ function openTable(net, path, init, meta) {
   subs.table = net.watchDoc(path, d => { S.doc = d; S.docLoaded = true; onDoc(); render(); });
 }
 function openRoom(code) { openTable(NET, 'rooms/' + code, null, { kind: 'free', code }); }
-function openLocal() { openTable(LOCAL, 'rooms/LOCAL', () => T.initFree('LOCAL', rnd(), S.freeOpts), { kind: 'free', code: null, local: true }); }
-async function newLocal() { await LOCAL.set('rooms/LOCAL', T.initFree('LOCAL', rnd(), S.freeOpts)); go('local'); }
+function openLocal() { openTable(LOCAL, 'rooms/LOCAL', () => T.initFree('LOCAL', S.freeOpts), { kind: 'free', code: null, local: true }); }
+async function newLocal() { await LOCAL.set('rooms/LOCAL', T.initFree('LOCAL', S.freeOpts)); go('local'); }
 
 /* ---------- Actions ---------- */
 // Après un coup accepté, on attend que la table reçoive la nouvelle version avant d'autoriser un autre coup.
@@ -140,7 +150,7 @@ async function act(a) {
   S.pending = true; render();
   const before = S.doc ? S.doc.rev : -1;
   try {
-    const r = await c.net.act(c.path, c.init, a);
+    const r = await c.net.act(c.path, c.init, { ...a, hands: myHands() });
     if (r === true && c === S.cur) S.awaitRev = before;
     if (r !== true && !['Coup périmé', "Ce n'est plus ce tour", 'Déjà commencé', 'Donne en cours'].includes(r)) S.err = r;
   } catch (e) { S.err = 'Coup non transmis : ' + (e.code || e.message) + '. Vérifiez la connexion et réessayez.'; }
@@ -155,22 +165,38 @@ async function createRoom() {
   try {
     for (let k = 0; k < 6; k++) {
       const code = Array.from({ length: 4 }, () => A[Math.floor(Math.random() * A.length)]).join('');
-      if (await NET.create('rooms/' + code, T.initFree(code, rnd(), S.freeOpts))) { S.busy = false; go('r=' + code); return; }
+      if (await NET.create('rooms/' + code, T.initFree(code, S.freeOpts))) { S.busy = false; go('r=' + code); return; }
     }
   } catch (e) { S.err = 'Création impossible (' + (e.code || e.message) + ').'; }
   S.busy = false; render();
 }
 async function createTournament() {
   const f = S.form, id = 't' + Date.now().toString(36) + rnd().slice(0, 4);
-  const tour = { id, name: f.name.trim() || 'Tournoi du ' + new Date().toLocaleDateString('fr-FR'), tables: f.tables, perSet: f.perSet, seed: rnd() + rnd(), createdAt: Date.now() };
+  const tour = { id, name: f.name.trim() || 'Tournoi du ' + new Date().toLocaleDateString('fr-FR'), tables: f.tables, perSet: f.perSet, owner: NET.uid, createdAt: Date.now() };
   S.busy = true; render();
-  try { await NET.set('tournaments/' + id, tour); S.busy = false; go('t=' + id); }
+  try { await NET.set('tournaments/' + id, tour); await NET.setMany(T.tourHands(tour, rnd() + rnd())); S.busy = false; go('t=' + id); }
   catch (e) { S.busy = false; S.err = 'Création impossible (' + (e.code || e.message) + ').'; render(); }
 }
 
 /* ---------- Déroulé : pause de fin de pli, IA, vibration ---------- */
 const uid = () => (S.cur ? S.cur.net.uid : null);
 const mySeats = d => d ? [0, 1, 2, 3].filter(i => !d.seats[i].bot && d.seats[i].uid === uid()) : [];
+/* Mains privées de la donne en cours que ce téléphone peut lire : ses sièges, et ceux de l'IA s'il est assis. */
+const handsKey = () => (S.cur && S.doc && S.doc.hk != null ? S.cur.path + '#' + S.doc.hk : null);
+const myHands = () => (S.hands && S.hands.key === handsKey() ? S.hands.cards : {});
+const game = d => T.getGame(d, myHands());
+function loadHands() {
+  const d = S.doc, c = S.cur, key = handsKey(); if (!key) return;
+  if (!S.hands || S.hands.key !== key) S.hands = { key, cards: {}, asked: {} };
+  const h = S.hands, mine = mySeats(d);
+  for (const s of [0, 1, 2, 3]) {
+    if (!(mine.includes(s) || (mine.length && d.seats[s].bot)) || h.cards[s] || h.asked[s]) continue;
+    h.asked[s] = true;
+    c.net.get(T.handPath(c.path, d.hk, s))
+      .then(v => { if (v) { h.cards[s] = v.cards; if (S.hands === h) { render(); scheduleBot(); } } else h.asked[s] = false; })
+      .catch(() => { h.asked[s] = false; }); // siège changé entre-temps : nouvel essai à la prochaine version de la table
+  }
+}
 let botTimer = null, pauseTimer = null, wasMyTurn = false, fxTimer = null, fxQueue = [];
 const $fx = document.getElementById('fx');
 function fx(main, sub = '', tone = '', delay = 0) {
@@ -213,7 +239,8 @@ function announce(d, g) {
   }
 }
 function onDoc() {
-  const d = S.doc, g = d && T.getGame(d);
+  loadHands();
+  const d = S.doc, g = d && game(d);
   if (g) {
     const key = (d.kind === 'free' ? d.n : '') + ':' + g.idx;
     if (S.trickKey !== key) { S.trickKey = key; S.trickSeen = g.tricks.length; S.pauseUntil = 0; S.showHands = false; S.bidSel = { value: null, suit: null }; }
@@ -229,12 +256,12 @@ function onDoc() {
 function scheduleBot() {
   clearTimeout(botTimer);
   const d = S.doc; if (!d || d.status !== 'playing') return;
-  const g = T.getGame(d); if (!g || g.phase === 'done' || !d.seats[g.turn].bot) return;
+  const g = game(d); if (!g || g.phase === 'done' || !d.seats[g.turn].bot || !g.hands[g.turn]) return;
   const mine = mySeats(d); if (!mine.length) return; // seuls les joueurs assis font jouer l'IA
   const rank = d.seats.filter(s => !s.bot && s.uid).findIndex(s => s.uid === uid());
   const wait = Math.max(0, S.pauseUntil - Date.now()) + (g.phase === 'bid' ? 700 : 600) + Math.max(0, rank) * 350;
   const rev = d.rev, seat = g.turn;
-  botTimer = setTimeout(() => { if (S.doc && S.doc.rev === rev) S.cur.net.act(S.cur.path, S.cur.init, { type: 'botmove', seat, rev }).catch(() => {}); }, wait);
+  botTimer = setTimeout(() => { if (S.doc && S.doc.rev === rev) S.cur.net.act(S.cur.path, S.cur.init, { type: 'botmove', seat, rev, hands: myHands() }).catch(() => {}); }, wait);
 }
 
 /* ---------- Rendu : éléments communs ---------- */
@@ -444,7 +471,7 @@ function viewLobby(d, title, backH) {
 }
 
 function viewGame(d, title, backH) {
-  const g = T.getGame(d), mine = mySeats(d);
+  const g = game(d), mine = mySeats(d);
   const paused = Date.now() < S.pauseUntil && !g.trick.length && g.lastTrick;
   const viewer = mine.length === 0 ? 0 : mine.length === 1 ? mine[0] : (mine.includes(S.revealed) ? S.revealed : mine[0]);
   const handVisible = mine.length === 1 || (mine.length > 1 && mine.includes(S.revealed));
@@ -457,7 +484,7 @@ function viewGame(d, title, backH) {
     const p = pos(s), lb = g.phase === 'bid' ? lastBid(s) : null;
     const isTurn = g.turn === s && g.phase !== 'done' && !paused;
     const bub = lb ? `<span class="bub ${lb.type === 'pass' ? 'pass' : lb.type !== 'bid' ? 'hot' : ''}">${bidTxt(lb)}</span>` : '';
-    const backs = p !== 0 && g.phase !== 'done' ? `<span class="backs">${'<i></i>'.repeat(g.hands[s].length)}</span>` : '';
+    const backs = p !== 0 && g.phase !== 'done' ? `<span class="backs">${'<i></i>'.repeat(T.left(g, s))}</span>` : '';
     return `<div class="seat p${p} t${s % 2} ${isTurn ? 'turn' : ''}">${p === 0 ? bub : ''}
       <span class="nm">${esc(seatName(d, s))}${g.dealer === s ? '<span class="dealer" title="Donneur">D</span>' : ''}</span>${p !== 0 ? backs + bub : ''}</div>`;
   }).join('');
@@ -472,6 +499,7 @@ function viewGame(d, title, backH) {
   let hand;
   if (!mine.length) hand = `<div class="hand hidden">Vous regardez la table. Asseyez-vous à un siège libre entre deux donnes pour jouer.</div>`;
   else if (!handVisible) hand = `<div class="hand hidden">Vos cartes s'afficheront à votre tour.</div>`;
+  else if (g.phase !== 'done' && !g.hands[viewer]) hand = `<div class="hand hidden">Distribution…</div>`;
   else {
     const legal = canPlay ? E.legalCards(g, viewer).map(x => x.r + x.s) : [];
     const cards = g.phase === 'done' ? [] : g.hands[viewer];
@@ -572,9 +600,10 @@ function resultPanel(d, g, mine) {
     if (!nx) nextLbl = 'Terminer';
     else if (nx.round !== d.round) nextLbl = `Série ${LETTER(E.setForTable(d.tour.tables, d.table, nx.round))} (tour ${nx.round + 1})`;
   }
-  const hands = S.showHands ? `<div class="hands4">${[2, 3, 1, 0].map(s => `<div class="h"><span>${E.SEAT_NAME[E.SEATS[s]]}</span><span class="cs">${E.sortHand(g.initialHands[s], g.contract && g.contract.suit).map(x => cardHTML(x, 'sm')).join('')}</span></div>`).join('')}</div>` : '';
+  const all = T.dealHands(g);
+  const hands = S.showHands && all ? `<div class="hands4">${[2, 3, 1, 0].map(s => `<div class="h"><span>${E.SEAT_NAME[E.SEATS[s]]}</span><span class="cs">${E.sortHand(all[s], g.contract && g.contract.suit).map(x => cardHTML(x, 'sm')).join('')}</span></div>`).join('')}</div>` : '';
   const canNext = mine.length && !busy();
-  return `${head}${line}${extra}<button class="btn ghost" data-a="toggleHands">${S.showHands ? 'Masquer les quatre jeux' : 'Voir les quatre jeux'}</button>${hands}
+  return `${head}${line}${extra}${all ? `<button class="btn ghost" data-a="toggleHands">${S.showHands ? 'Masquer les quatre jeux' : 'Voir les quatre jeux'}</button>` : ''}${hands}
     ${canNext ? `<button class="btn primary block" data-a="next">${nextLbl}</button>` : `<p class="small muted">Un joueur assis lance la donne suivante.</p>`}
     ${mine.length ? `<button class="lnk" data-a="go" data-h="${d.kind === 'tour' ? `t=${S.tourId}&n=${d.table}&lobby=1` : (S.cur.local ? 'local&lobby=1' : 'r=' + d.code + '&lobby=1')}">Changer les sièges</button>` : ''}`;
 }
@@ -629,17 +658,17 @@ $app.addEventListener('click', async e => {
     case 'fillBots': act({ type: 'fillBots' }); break;
     case 'start': S.lobbyOnly = false; act({ type: 'start' }); break;
     case 'next': S.lobbyOnly = false; act({ type: 'next' }); break;
-    case 'reveal': S.revealed = T.getGame(S.doc).turn; render(); break;
+    case 'reveal': S.revealed = game(S.doc).turn; render(); break;
     case 'selVal': S.bidSel.value = +d.v; render(); break;
     case 'selSuit': S.bidSel.suit = d.s; render(); break;
     case 'bid': {
-      const g = T.getGame(S.doc);
+      const g = game(S.doc);
       if (d.t === 'bid') { if (S.bidSel.value === null || !S.bidSel.suit) return; act({ type: 'bid', seat: g.turn, bid: { type: 'bid', value: S.bidSel.value, suit: S.bidSel.suit } }); }
       else act({ type: 'bid', seat: g.turn, bid: { type: d.t } });
       S.bidSel = { value: null, suit: null };
       break;
     }
-    case 'play': { const g = T.getGame(S.doc); const [r, s] = [d.c.slice(0, -1), d.c.slice(-1)]; act({ type: 'card', seat: g.turn, card: { r, s } }); break; }
+    case 'play': { const g = game(S.doc); const [r, s] = [d.c.slice(0, -1), d.c.slice(-1)]; act({ type: 'card', seat: g.turn, card: { r, s } }); break; }
     case 'toggleHands': S.showHands = !S.showHands; render(); break;
   }
 });
