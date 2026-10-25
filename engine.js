@@ -1,14 +1,19 @@
 /* ===== Moteur de coinche (sans DOM) ===== */
 const E = (() => {
   const SUITS = ['S', 'H', 'D', 'C'];
-  const SYM = { S: '♠', H: '♥', D: '♦', C: '♣' };
-  const SUIT_NAME = { S: 'Pique', H: 'Cœur', D: 'Carreau', C: 'Trèfle' };
+  const SYM = { S: '♠', H: '♥', D: '♦', C: '♣', NT: 'SA', AT: 'TA' };
+  const SUIT_NAME = { S: 'Pique', H: 'Cœur', D: 'Carreau', C: 'Trèfle', NT: 'Sans atout', AT: 'Tout atout' };
+  const CONTRACTS = ['S', 'H', 'D', 'C', 'NT', 'AT']; // couleurs + sans atout + tout atout
   const RANKS = ['7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
   const RANK_FR = { '7': '7', '8': '8', '9': '9', '10': '10', J: 'J', Q: 'Q', K: 'K', A: 'A' };
   const TRUMP_ORD = ['7', '8', 'Q', 'K', '10', 'A', '9', 'J'];
   const PLAIN_ORD = ['7', '8', '9', 'J', 'Q', 'K', '10', 'A'];
   const TRUMP_PTS = { J: 20, '9': 14, A: 11, '10': 10, K: 4, Q: 3, '8': 0, '7': 0 };
   const PLAIN_PTS = { A: 11, '10': 10, K: 4, Q: 3, J: 2, '9': 0, '8': 0, '7': 0 };
+  // Sans atout : l'as vaut 19 ; tout atout : chaque couleur est atout, barème réduit. Total toujours 152 + 10 de der.
+  const NT_PTS = { A: 19, '10': 10, K: 4, Q: 3, J: 2, '9': 0, '8': 0, '7': 0 };
+  const AT_PTS = { J: 14, '9': 9, A: 6, '10': 5, K: 3, Q: 1, '8': 0, '7': 0 };
+  const isTrumpOf = (c, t) => t === 'AT' || c.s === t; // en tout atout, toute carte est un atout de sa couleur
   const SEATS = ['S', 'E', 'N', 'O']; // ordre de jeu : sens inverse des aiguilles d'une montre
   const SEAT_NAME = { S: 'Sud', E: 'Est', N: 'Nord', O: 'Ouest' };
   const BID_VALUES = [80, 90, 100, 110, 120, 130, 140, 150, 160, 250];
@@ -39,10 +44,10 @@ const E = (() => {
   const sameCard = (a, b) => a.r === b.r && a.s === b.s;
 
   function sortHand(hand, trump) {
-    const order = trump ? [trump, ...SUITS.filter(s => s !== trump)] : ['S', 'H', 'C', 'D'];
+    const order = trump && SUITS.includes(trump) ? [trump, ...SUITS.filter(s => s !== trump)] : ['S', 'H', 'C', 'D'];
     return hand.slice().sort((a, b) => {
       if (a.s !== b.s) return order.indexOf(a.s) - order.indexOf(b.s);
-      const ord = a.s === trump ? TRUMP_ORD : PLAIN_ORD;
+      const ord = isTrumpOf(a, trump) ? TRUMP_ORD : PLAIN_ORD;
       return ord.indexOf(b.r) - ord.indexOf(a.r);
     });
   }
@@ -58,11 +63,12 @@ const E = (() => {
   }
 
   const strength = (c, trump, led) => {
+    if (trump === 'AT') return c.s === led ? 100 + TRUMP_ORD.indexOf(c.r) : -1;
     if (c.s === trump) return 100 + TRUMP_ORD.indexOf(c.r);
     if (c.s === led) return 10 + PLAIN_ORD.indexOf(c.r);
     return -1;
   };
-  const points = (c, trump) => (c.s === trump ? TRUMP_PTS[c.r] : PLAIN_PTS[c.r]);
+  const points = (c, trump) => (trump === 'AT' ? AT_PTS[c.r] : trump === 'NT' ? NT_PTS[c.r] : c.s === trump ? TRUMP_PTS[c.r] : PLAIN_PTS[c.r]);
 
   function trickWinner(trick, trump) {
     const led = trick[0].card.s;
@@ -106,7 +112,7 @@ const E = (() => {
       if (!g.contract && g.passes === 4) { g.phase = 'done'; g.result = scoreDeal(g); return g; }
       if (g.contract && g.passes === 3) return startPlay(g);
     } else if (bid.type === 'bid') {
-      if (!opts.values.includes(bid.value) || !SUITS.includes(bid.suit)) throw new Error('Annonce invalide');
+      if (!opts.values.includes(bid.value) || !CONTRACTS.includes(bid.suit)) throw new Error('Annonce invalide');
       g.contract = { value: bid.value, suit: bid.suit, seat, coinche: 1 };
       g.passes = 0;
     } else if (bid.type === 'coinche') {
@@ -126,7 +132,7 @@ const E = (() => {
     g.leader = next(g.dealer); g.turn = g.leader;
     const t = g.contract.suit;
     for (let p = 0; p < 4; p++) {
-      if (g.hands[p].some(c => c.s === t && c.r === 'K') && g.hands[p].some(c => c.s === t && c.r === 'Q')) g.beloteSeat = p;
+      if (SUITS.includes(t) && g.hands[p].some(c => c.s === t && c.r === 'K') && g.hands[p].some(c => c.s === t && c.r === 'Q')) g.beloteSeat = p;
       g.hands[p] = sortHand(g.hands[p], t);
     }
     return g;
@@ -137,17 +143,25 @@ const E = (() => {
     if (g.phase !== 'play' || !g.trick.length) return hand.slice();
     const trump = g.contract.suit, led = g.trick[0].card.s;
     const follow = hand.filter(c => c.s === led);
+    const partnerMaster = team(trickWinner(g.trick, trump)) === team(seat);
+    if (trump === 'NT') return follow.length ? follow : hand.slice();
+    if (trump === 'AT') { // fournir, et monter dans la couleur demandée sauf si le partenaire est maître
+      if (!follow.length) return hand.slice();
+      const best = Math.max(...g.trick.filter(x => x.card.s === led).map(x => TRUMP_ORD.indexOf(x.card.r)));
+      const up = follow.filter(c => TRUMP_ORD.indexOf(c.r) > best);
+      return up.length && !partnerMaster ? up : follow;
+    }
     const trumpsInTrick = g.trick.filter(x => x.card.s === trump).map(x => TRUMP_ORD.indexOf(x.card.r));
     const bestT = trumpsInTrick.length ? Math.max(...trumpsInTrick) : -1;
     const myTrumps = hand.filter(c => c.s === trump);
     const higher = myTrumps.filter(c => TRUMP_ORD.indexOf(c.r) > bestT);
     if (led === trump) {
-      if (follow.length) return higher.length ? higher : follow;
+      if (follow.length) return higher.length && !partnerMaster ? higher : follow; // partenaire maître : pas obligé de monter
       return hand.slice();
     }
     if (follow.length) return follow;
     if (!myTrumps.length) return hand.slice();
-    if (team(trickWinner(g.trick, trump)) === team(seat)) return hand.slice(); // partenaire maître
+    if (partnerMaster) return hand.slice(); // partenaire maître : défausse libre, pas d'obligation de couper ni de surcouper
     return higher.length ? higher : myTrumps; // couper / surcouper, sinon sous-couper
   }
 
@@ -219,7 +233,7 @@ const E = (() => {
     const hand = g.hands[seat], cur = g.contract;
     const myPrev = g.bids.filter(b => b.seat === seat && b.type === 'bid').length;
     // soutien du partenaire
-    if (cur && cur.seat === partner(seat) && !myPrev) {
+    if (cur && cur.seat === partner(seat) && !myPrev && SUITS.includes(cur.suit)) {
       const e = evalSuit(hand, cur.suit);
       let sup = 0;
       for (const s of SUITS) if (s !== cur.suit && hand.some(c => c.s === s && c.r === 'A')) sup += 10;
@@ -230,7 +244,7 @@ const E = (() => {
     }
     if (cur && cur.seat === partner(seat)) return { type: 'pass' };
     // coinche défensive
-    if (opts.coinche && cur.value >= 100) {
+    if (opts.coinche && cur.value >= 100 && SUITS.includes(cur.suit)) {
       const e = evalSuit(hand, cur.suit);
       const aces = SUITS.filter(s => s !== cur.suit && hand.some(c => c.s === s && c.r === 'A')).length;
       if (e.n >= 3 && (e.J || e.nine) && aces >= 1) return { type: 'coinche' };
@@ -244,6 +258,12 @@ const E = (() => {
       const v = Math.min(160, 80 + Math.floor((e.est - 88) / 11) * 10);
       if (!best || v > best.value) best = { value: v, suit: s };
     }
+    // Tout atout : beaucoup de valets et de 9 ; sans atout : as et 10 secs dans plusieurs couleurs
+    const has = (r, s) => hand.some(c => c.r === r && c.s === s);
+    const J = SUITS.filter(s => has('J', s)).length, N = SUITS.filter(s => has('9', s)).length;
+    const A = SUITS.filter(s => has('A', s)).length, A10 = SUITS.filter(s => has('A', s) && has('10', s)).length;
+    if ((J >= 3 && N >= 2) || J === 4) { const v = Math.min(140, 80 + (J + N - 5) * 10); if (!best || v > best.value) best = { value: Math.max(80, v), suit: 'AT' }; }
+    if (A >= 3 && A10 >= 2) { const v = Math.min(140, 80 + (A + A10 - 4) * 10); if (!best || v > best.value) best = { value: Math.max(80, v), suit: 'NT' }; }
     if (best && opts.values.includes(best.value) && myPrev < 2) return { type: 'bid', ...best };
     return { type: 'pass' };
   }
@@ -258,7 +278,7 @@ const E = (() => {
   function isMaster(g, seat, card) {
     const t = g.contract.suit;
     const out = unseen(g, seat).filter(c => c.s === card.s);
-    const ord = card.s === t ? TRUMP_ORD : PLAIN_ORD;
+    const ord = isTrumpOf(card, t) ? TRUMP_ORD : PLAIN_ORD;
     if (out.some(c => ord.indexOf(c.r) > ord.indexOf(card.r))) return false;
     if (card.s !== t) {
       // une coupe adverse reste possible si des atouts traînent
@@ -357,7 +377,7 @@ const E = (() => {
   }
 
   return {
-    SUITS, SYM, SUIT_NAME, RANK_FR, SEATS, SEAT_NAME, BID_VALUES, team, partner, next,
+    SUITS, CONTRACTS, SYM, SUIT_NAME, RANK_FR, SEATS, SEAT_NAME, BID_VALUES, team, partner, next,
     hashStr, makeDeal, newGame, legalBidOptions, applyBid, legalCards, playCard, trickWinner, points, sortHand, sameCard,
     botBid, botPlay, setForTable, dealsOfSet, matchpoints, standings,
   };

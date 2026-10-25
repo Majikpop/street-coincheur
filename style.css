@@ -269,3 +269,9 @@ input[type=text]::placeholder { color: var(--dim); }
 .contract .suit.red { color: #ff5a64; text-shadow: 0 0 1px #fff; }
 .status .suit, .muted .suit, .small .suit { font-size: 1.35em; }
 .status .suit.red { color: #ff5a64; }
+
+.suit.tx { font-family: var(--f-hud); font-size: .8em; vertical-align: 0; letter-spacing: .02em; color: var(--gold); }
+.seat .bub .suit.tx { font-size: .95em; color: #7a4b00; }
+.contract .suit.tx { font-size: 1em; color: var(--gold); }
+.suits { grid-template-columns: repeat(6, 1fr); }
+.suits button.tx { font-family: var(--f-hud); font-size: .6rem; }

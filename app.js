@@ -7,7 +7,7 @@ const LS = {
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const LETTER = i => String.fromCharCode(65 + i);
 const isRed = s => s === 'H' || s === 'D';
-const sym = s => `<span class="suit ${isRed(s) ? 'red' : 'blk'}">${E.SYM[s]}</span>`;
+const sym = s => (s === 'NT' || s === 'AT') ? `<span class="suit tx">${E.SYM[s]}</span>` : `<span class="suit ${isRed(s) ? 'red' : 'blk'}">${E.SYM[s]}</span>`;
 const clone = o => JSON.parse(JSON.stringify(o));
 const rnd = () => Math.random().toString(36).slice(2, 10);
 
@@ -289,8 +289,11 @@ function viewHome() {
 function rulesBlock() {
   return `<details class="sheet rules"><summary>Règles et barème</summary><ul>
     <li>32 cartes, jeu dans le sens inverse des aiguilles d'une montre. Atout : J 20, 9 14, A 11, 10 10, K 4, Q 3. Hors atout : A 11, 10 10, K 4, Q 3, J 2. (J = valet, Q = dame, K = roi.)</li>
-    <li>Enchères de 80 à 160 puis capot, à la couleur. Coinche par la défense, surcoinche par l'équipe preneuse.</li>
-    <li>Fournir, couper si l'adversaire est maître, monter à l'atout, sous-couper faute de mieux. Partenaire maître : défausse libre.</li>
+    <li>Enchères de 80 à 160 puis capot, à la couleur, sans atout (SA) ou tout atout (TA). Coinche par la défense, surcoinche par l'équipe preneuse.</li>
+    <li>Fournir à la couleur demandée si on peut. Sinon, couper si l'adversaire est maître (en surcoupant si possible, sinon en sous-coupant).</li>
+    <li>Partenaire maître (à la couleur ou parce qu'il a coupé) : on fournit si on peut, sinon défausse libre ; pas d'obligation de couper, de surcouper ni de monter sur son partenaire.</li>
+    <li>Sans atout (SA) : pas d'atout, on fournit, la plus forte de la couleur demandée gagne. As 19, 10 10, K 4, Q 3, J 2.</li>
+    <li>Tout atout (TA) : chaque couleur est atout ; on fournit et on monte dans la couleur demandée (sauf sur son partenaire). J 14, 9 9, A 6, 10 5, K 3, Q 1. Pas de belote en SA ni en TA.</li>
     <li>Contrat réussi si les points faits (belote comprise) atteignent l'annonce et au moins 82. Réussi : annonce + points faits. Chute : 160 + annonce pour la défense. Coinche ×2, surcoinche ×4. Belote +20, dix de der +10, capot 250.</li>
     <li>Duplicate : chaque donne est comparée entre les tables. Points de match : 2 si mieux, 1 si égalité, 0 sinon, en pourcentage. Classements séparés Nord-Sud et Est-Ouest.</li>
   </ul></details>`;
@@ -506,7 +509,7 @@ function panel(d, g, v, mine, paused, cover) {
     const sel = S.bidSel;
     if (sel.value !== null && !o.values.includes(sel.value)) sel.value = null;
     const vals = o.values.map(x => `<button class="${sel.value === x ? 'on' : ''}" data-a="selVal" data-v="${x}">${valTxt(x)}</button>`).join('');
-    const suits = E.SUITS.map(s => `<button class="${isRed(s) ? 'red' : ''} ${sel.suit === s ? 'on' : ''}" data-a="selSuit" data-s="${s}" aria-label="${E.SUIT_NAME[s]}">${E.SYM[s]}</button>`).join('');
+    const suits = E.CONTRACTS.map(s => `<button class="${isRed(s) ? 'red' : ''} ${s === 'NT' || s === 'AT' ? 'tx' : ''} ${sel.suit === s ? 'on' : ''}" data-a="selSuit" data-s="${s}" aria-label="${E.SUIT_NAME[s]}">${E.SYM[s]}</button>`).join('');
     const can = sel.value !== null && sel.suit && !busy();
     const bidBtn = lbl => `<button class="btn primary" data-a="bid" data-t="bid" ${can ? '' : 'disabled'}>${sel.value !== null && sel.suit ? `${lbl} ${valTxt(sel.value)} ${E.SYM[sel.suit]}` : lbl}</button>`;
     return `<p class="status">À vous d'annoncer${g.contract ? ` · actuel : ${contractTxt(g.contract)} (${esc(seatName(d, g.contract.seat))})` : ''}</p>
