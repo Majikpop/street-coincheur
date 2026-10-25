@@ -114,7 +114,7 @@ const S = {
   form: { name: '', tables: 2, perSet: 8 }, code: '',
   cur: null, doc: null, docLoaded: false,
   freeOpts: LS.get('sc_free', { target: 1000, moc: false }),
-  hands: null, revealed: null, pending: false, confirm: null, showHands: false, bidSel: { value: null, suit: null },
+  hands: null, revealed: null, pending: false, confirm: null, showHands: false, showLast: false, bidSel: { value: null, suit: null },
   trickKey: null, trickSeen: 0, pauseUntil: 0,
 };
 const subs = {};
@@ -265,8 +265,8 @@ function onDoc() {
   const d = S.doc, g = d && game(d);
   if (g) {
     const key = (d.kind === 'free' ? d.n : '') + ':' + g.idx;
-    if (S.trickKey !== key) { S.trickKey = key; S.trickSeen = g.tricks.length; S.pauseUntil = 0; S.showHands = false; S.bidSel = { value: null, suit: null }; }
-    else if (g.tricks.length > S.trickSeen) { S.trickSeen = g.tricks.length; S.pauseUntil = Date.now() + 1300; clearTimeout(pauseTimer); pauseTimer = setTimeout(() => { render(); scheduleBot(); }, 1320); }
+    if (S.trickKey !== key) { S.trickKey = key; S.trickSeen = g.tricks.length; S.pauseUntil = 0; S.showHands = false; S.showLast = false; S.bidSel = { value: null, suit: null }; }
+    else if (g.tricks.length > S.trickSeen) { S.trickSeen = g.tricks.length; S.showLast = false; S.pauseUntil = Date.now() + 1300; clearTimeout(pauseTimer); pauseTimer = setTimeout(() => { render(); scheduleBot(); }, 1320); }
     const mine = mySeats(d);
     const myTurn = d.status === 'playing' && g.phase !== 'done' && mine.includes(g.turn);
     if (myTurn && !wasMyTurn && mine.length === 1 && navigator.vibrate) { try { navigator.vibrate(60); } catch (e) {} }
@@ -593,8 +593,18 @@ function panel(d, g, v, mine, paused, cover) {
     return `<p class="status">Pli pour ${esc(seatName(d, w))} · ${pts} point${pts > 1 ? 's' : ''}${g.tricks.length === 8 ? ' + 10 de der' : ''}</p>`;
   }
   const belote = g.beloteSaid ? `<p class="small muted">${g.beloteSaid === 1 ? 'Belote' : 'Rebelote'} pour ${esc(seatName(d, g.beloteSeat))}.</p>` : '';
-  if (myTurn) return `<p class="status">À vous de jouer</p><p class="small muted">Les cartes jouables sont surélevées.</p>${belote}`;
-  return `<p class="status">${waitTxt}${d.seats[g.turn].bot ? '' : ' de jouer'}</p>${belote}`;
+  const last = lastTrickBox(d, g);
+  if (myTurn) return `<p class="status">À vous de jouer</p><p class="small muted">Les cartes jouables sont surélevées.</p>${belote}${last}`;
+  return `<p class="status">${waitTxt}${d.seats[g.turn].bot ? '' : ' de jouer'}</p>${belote}${last}`;
+}
+/* Règle : on peut demander à revoir le dernier pli ramassé, jusqu'à la fin de la donne. */
+function lastTrickBox(d, g) {
+  if (!g.tricks.length) return '';
+  const t = g.tricks[g.tricks.length - 1];
+  const pts = t.cards.reduce((a, x) => a + E.points(x.card, g.contract.suit), 0);
+  const box = S.showLast ? `<div class="lastpli">${t.cards.map(x => `<div class="${x.seat === t.winner ? 'win' : ''}">${cardHTML(x.card)}<span>${esc(seatName(d, x.seat))}</span></div>`).join('')}</div>
+    <p class="small muted">Pli ${g.tricks.length} pour ${esc(seatName(d, t.winner))} · ${pts} point${pts > 1 ? 's' : ''}</p>` : '';
+  return `<button class="btn ghost sm" data-a="toggleLast">${S.showLast ? 'Masquer le dernier pli' : 'Voir le dernier pli'}</button>${box}`;
 }
 function bidHistory(d, g) {
   if (!g.bids.length) return `<p class="small muted">Premier à parler : ${esc(seatName(d, E.next(g.dealer)))}.</p>`;
@@ -700,6 +710,7 @@ $app.addEventListener('click', async e => {
     }
     case 'play': { const g = game(S.doc); const [r, s] = [d.c.slice(0, -1), d.c.slice(-1)]; act({ type: 'card', seat: g.turn, card: { r, s } }); break; }
     case 'toggleHands': S.showHands = !S.showHands; render(); break;
+    case 'toggleLast': S.showLast = !S.showLast; render(); break;
   }
 });
 window.addEventListener('hashchange', route);
