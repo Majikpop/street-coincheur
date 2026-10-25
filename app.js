@@ -189,13 +189,13 @@ async function createTournament() {
 }
 
 /** Supprime un tournoi qui ne sera pas terminé : tables, résultats et tournoi. */
-async function killTournament() {
-  const tid = S.tourId; if (!tid) return;
+async function killTournament(tid) {
+  if (!tid) return;
   S.busy = true; S.confirm = null; render();
   try {
     await NET.removeTree('tournaments/' + tid, ['tables', 'results']);
-    ['tour', 'results', 'tables'].forEach(unsub);
-    S.tourId = null; S.tour = null; S.results = []; S.tables = {}; S.busy = false;
+    if (S.tourId === tid) { ['tour', 'results', 'tables'].forEach(unsub); S.tourId = null; S.tour = null; S.results = []; S.tables = {}; }
+    S.busy = false;
     go('');
   } catch (e) { S.busy = false; S.err = 'Suppression impossible (' + (e.code || e.message) + ').'; render(); }
 }
@@ -311,9 +311,12 @@ function nameField(id) {
 
 /* ---------- Écrans ---------- */
 function viewHome() {
-  const tours = S.tours.map(t => `<button class="item" data-a="go" data-h="t=${esc(t.id)}">
+  const tours = S.tours.map(t => S.confirm === 'kill:' + t.id
+    ? `<div class="item kill-row"><span class="small"><b>Supprimer « ${esc(t.name)} » ?</b> <span class="muted">Tables et résultats effacés pour tout le monde.</span></span>
+      <span class="row"><button class="btn danger sm" data-a="killTour" data-id="${esc(t.id)}" ${S.busy ? 'disabled' : ''}>${S.busy ? '…' : 'Oui'}</button><button class="btn ghost sm" data-a="confirm" data-c="">Non</button></span></div>`
+    : `<div class="item tour-row"><button class="tour-open" data-a="go" data-h="t=${esc(t.id)}">
       <span class="stack" style="gap:2px"><b>${esc(t.name)}</b><span class="meta">${t.tables} table${t.tables > 1 ? 's' : ''} · séries de ${t.perSet} donnes</span></span>
-      <span class="chev" aria-hidden="true">›</span></button>`).join('');
+      <span class="chev" aria-hidden="true">›</span></button><button class="btn danger sm" data-a="confirm" data-c="kill:${esc(t.id)}" aria-label="Supprimer le tournoi ${esc(t.name)}">Kill</button></div>`).join('');
   const online = S.net === 'online';
   return `<div class="wrap">
     <header class="stack" style="gap:14px">${window.SC_POSTER ? `<h1 class="sr-only">Street Coincheur</h1><div class="poster">${window.SC_POSTER}</div>` : '<h1 class="logo" aria-label="Street Coincheur"><span class="l1">Street</span><span class="l2">Coincheur</span></h1>'}
@@ -432,7 +435,7 @@ function viewTour() {
     <section class="section"><h2>Donne par donne</h2>${detail}</section>
     <section class="section kill sheet pad stack">${S.confirm === 'kill'
       ? `<p><b>Supprimer « ${esc(t.name)} » ?</b> <span class="muted small">Les tables${S.results.length ? `, les ${S.results.length} résultat${S.results.length > 1 ? 's' : ''}` : ''} et le classement seront effacés pour tout le monde. Impossible de revenir en arrière.</span></p>
-        <div class="row"><button class="btn danger" data-a="killTour" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Suppression…' : 'Oui, supprimer'}</button><button class="btn ghost" data-a="confirm" data-c="">Annuler</button></div>`
+        <div class="row"><button class="btn danger" data-a="killTour" data-id="${esc(t.id)}" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Suppression…' : 'Oui, supprimer'}</button><button class="btn ghost" data-a="confirm" data-c="">Annuler</button></div>`
       : `<p class="muted small">Tournoi abandonné, qui ne sera pas fini ?</p><button class="btn danger" data-a="confirm" data-c="kill">Kill</button>`}</section>
   </div>`;
 }
@@ -670,7 +673,7 @@ $app.addEventListener('click', async e => {
     case 'joinCode': { const c = S.code.trim().toUpperCase(); if (c.length === 4) go('r=' + c); else { S.err = 'Le code de table compte 4 lettres.'; render(); } break; }
     case 'step': { const lim = d.k === 'tables' ? [1, 12] : [1, 16]; S.form[d.k] = Math.min(lim[1], Math.max(lim[0], S.form[d.k] + +d.d)); render(); break; }
     case 'createTour': createTournament(); break;
-    case 'killTour': killTournament(); break;
+    case 'killTour': killTournament(d.id); break;
     case 'copy':
       try { await navigator.clipboard.writeText(d.u); b.textContent = 'Lien copié'; }
       catch (err) { const r = document.createRange(); r.selectNodeContents(document.getElementById('shareUrl')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = 'Lien sélectionné'; }
