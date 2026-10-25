@@ -1,0 +1,7 @@
+{
+  "name": "street-coincheur",
+  "private": true,
+  "scripts": {
+    "test": "node --test"
+  }
+}

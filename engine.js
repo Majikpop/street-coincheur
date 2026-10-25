@@ -396,7 +396,7 @@ const E = (() => {
   return {
     SUITS, CONTRACTS, SYM, SUIT_NAME, RANK_FR, SEATS, SEAT_NAME, BID_VALUES, team, partner, next,
     hashStr, makeDeal, newGame, legalBidOptions, applyBid, legalCards, playCard, trickWinner, points, sortHand, sameCard,
-    botBid, botPlay, setForTable, dealsOfSet, matchpoints, standings,
+    scoreDeal, botBid, botPlay, setForTable, dealsOfSet, matchpoints, standings,
   };
 })();
 if (typeof module !== 'undefined') module.exports = E;
