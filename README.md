@@ -4,7 +4,8 @@ Belote coinchée entre amis, jouable sur téléphone :
 - **table en ligne** : chaque joueur sur son écran, via un lien ou un code à 4 lettres ;
 - **passe-et-joue** : un même téléphone peut tenir deux sièges (le jeu se masque entre les mains) ;
 - **IA** pour compléter une table ;
-- **tournoi duplicate** : toutes les tables jouent les mêmes donnes, par séries de N donnes qui tournent entre les tables, avec classement en points de match (Nord-Sud et Est-Ouest).
+- **tournoi duplicate** : toutes les tables jouent les mêmes donnes, par séries de N donnes qui tournent entre les tables, avec classement en points de match (Nord-Sud et Est-Ouest) ;
+- **bilan de fin de tournoi** : podium, distinctions, écart à la moyenne, paires comparées tour par tour, et un portrait de chaque joueur (style d'annonce, contrats, coinches) face aux joueurs assis à la même place sur les autres tables.
 
 Site statique (HTML/JS, sans compilation) + Firebase (Firestore + connexion anonyme) pour le temps réel.
 
@@ -32,7 +33,8 @@ Sans `config.js` rempli, le jeu fonctionne hors ligne (parties sur le téléphon
 | `app.js` | Interface, connexion Firebase, mode hors ligne |
 | `config.js` | Configuration Firebase du projet |
 | `firestore.rules` | Règles d'accès Firestore |
-| `test/engine.test.js` | Tests du moteur (donnes complètes, score, coinche/surcoinche, duplicate) |
+| `test/engine.test.js` | Tests du moteur (donnes complètes, score, coinche/surcoinche, duplicate, bilan) |
+| `tools/simulate.js` | Simule un tournoi complet avec des profils de joueurs : `node tools/simulate.js 4 4 > tournoi.json` (le champ `store` se colle dans `localStorage.sc2_local` pour voir le bilan hors ligne) |
 
 ## Tests
 Aucune dépendance, Node 18 ou plus : `npm test` (ou `node --test`).

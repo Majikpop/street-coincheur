@@ -127,8 +127,8 @@ test('donne complète scriptée : capot et belote du preneur', () => {
   E.applyBid(g, S, { type: 'bid', value: 80, suit: 'S' });
   for (const s of [EST, N, O]) E.applyBid(g, s, { type: 'pass' });
   assert.equal(g.phase, 'play');
-  assert.equal(g.beloteSeat, S);
   while (g.phase === 'play') E.playCard(g, g.turn, E.legalCards(g, g.turn)[0]);
+  assert.equal(g.beloteSeat, S); // la belote se déclare en jouant la dame ou le roi
   assert.deepEqual(g.result.tricks, [8, 0]);
   assert.deepEqual(g.result.cardPts, [250, 0]);
   assert.equal(g.beloteSaid, 2);
@@ -520,4 +520,98 @@ test('duplicate de bout en bout : deux tables d\'IA, classement complémentaire'
   // mêmes donnes, mêmes IA : chaque donne est une égalité parfaite
   for (const deal of Object.values(mp)) for (const m of Object.values(deal)) { assert.equal(m.nsPct, 50); assert.equal(m.diff, 0); }
   E.standings(results, tables).forEach(l => { assert.equal(l.pct, 50); assert.equal(l.compared, tables * perSet); });
+});
+
+// ===================== Bilan de fin de tournoi =====================
+
+const R = (deal, table, ns, ew, contract = null, made = null, extra = {}) =>
+  ({ deal, table, ns, ew, contract, made, cardPts: [0, 0], names: { ns: `S${table} & N${table}`, ew: `E${table} & O${table}` }, ...extra });
+
+test('bilan : victoires à la table, contrats pris, chutes infligées, coinches', () => {
+  const results = [
+    R(0, 0, 182, 0, { value: 100, suit: 'S', seat: S, coinche: 1 }, true),
+    R(0, 1, 0, 260, { value: 100, suit: 'S', seat: S, coinche: 2 }, false, { coincheBy: EST }),
+    R(1, 0, 0, 160, { value: 80, suit: 'H', seat: EST, coinche: 1 }, true, { cardPts: [0, 250] }),
+    R(1, 1, 0, 0),
+  ];
+  const B = E.tourStats(results, 2, 1);
+  const p = (t, side) => B.pairs.find(x => x.table === t && x.side === side);
+  assert.equal(p(0, 'NS').pct, 50); // un top et un zéro chacun
+  assert.deepEqual([p(0, 'NS').rank, p(1, 'NS').rank], [1, 1]); // ex aequo
+  assert.deepEqual([p(0, 'NS').tops, p(0, 'NS').zeros], [1, 1]);
+  assert.deepEqual([p(0, 'NS').won, p(0, 'NS').lost], [1, 1]);
+  assert.deepEqual([p(1, 'NS').won, p(1, 'NS').lost, p(1, 'NS').tied], [0, 1, 1]);
+  assert.deepEqual([p(1, 'NS').taken, p(1, 'NS').failed, p(1, 'EO').sets, p(1, 'EO').coinched, p(1, 'EO').coincheWon], [1, 1, 1, 1, 1]);
+  assert.equal(p(0, 'EO').capots, 1);
+  assert.equal(B.field.contracts, 3);
+  assert.equal(B.field.passed, 1);
+  assert.equal(B.field.coinches, 1);
+  assert.equal(B.field.capots, 1);
+  assert.equal(B.complete, true);
+  // écart à la moyenne : NS table 0 fait +182 contre -260 de l'autre côté sur la donne 0
+  assert.equal(p(0, 'NS').net + p(1, 'NS').net, 0);
+  assert.equal(B.swings[0].deal, 0);
+  assert.equal(B.swings[0].spread, 182 + 260);
+  assert.equal(B.awards.find(a => a.key === 'coinche').side, 'EO');
+});
+
+test('bilan : pourcentage par tour, selon la série jouée', () => {
+  // 2 tables, 1 donne par série : la table 1 joue la donne 1 au tour 0, la donne 0 au tour 1
+  const results = [R(0, 0, 100, 0), R(0, 1, 0, 0), R(1, 0, 0, 0), R(1, 1, 50, 0)];
+  const B = E.tourStats(results, 2, 1);
+  const t1 = B.pairs.find(x => x.table === 1 && x.side === 'NS');
+  assert.deepEqual(t1.byRound.map(c => c.pct), [100, 0]);
+});
+
+test('bilan joueur : annonces, prises seules et comparaison à la même place', () => {
+  const bids = (...xs) => xs.map(([seat, type, value, suit]) => ({ seat, type, ...(value ? { value, suit } : {}) }));
+  const results = [
+    R(0, 0, 182, 0, { value: 100, suit: 'H', seat: S, coinche: 1 }, true, { bids: bids([EST, 'pass'], [N, 'pass'], [O, 'pass'], [S, 'bid', 100, 'H'], [EST, 'pass'], [N, 'pass'], [O, 'pass']) }),
+    R(0, 1, 0, 0, null, null, { bids: bids([EST, 'pass'], [N, 'pass'], [O, 'pass'], [S, 'pass']) }),
+    R(0, 2, 0, 0, null, null, { bids: bids([EST, 'pass'], [N, 'pass'], [O, 'pass'], [S, 'pass']) }),
+  ];
+  const P = E.playerStats(results, 3);
+  const sud0 = P.find(p => p.table === 0 && p.seat === S), sud1 = P.find(p => p.table === 1 && p.seat === S);
+  assert.equal(sud0.name, 'S0');
+  assert.equal(sud0.bidRate, 1);
+  assert.equal(sud0.avgBid, 100);
+  assert.equal(sud0.opened, 1);
+  assert.equal(sud0.favSuit, 'H');
+  assert.deepEqual([sud0.declarer, sud0.made, sud0.alone], [1, 1, 1]);
+  assert.equal(sud0.vs.bidRate, 0);
+  assert.equal(sud0.peers, 2);
+  assert.ok(sud0.styles.includes('fonceur'));
+  assert.equal(sud1.missed, 0); // un seul autre Sud a pris sur trois : pas une majorité
+  assert.ok(sud1.styles.includes('partenaire'));
+});
+
+test('tournoi simulé 4 tables × 4 donnes : 16 donnes par table, bilan complet', () => {
+  global.E = E; const T = require('../table.js');
+  const tour = { id: 'x', name: 'x', tables: 4, perSet: 4 }, store = {};
+  for (const w of T.tourHands(tour, 'graine')) store[w.path] = w.data;
+  for (let t = 0; t < 4; t++) {
+    const path = `tournaments/x/tables/t${t}`;
+    let d = T.initTour(tour, t);
+    const run = (a, uid) => { const r = T.apply(d, a, uid); d = r.doc; for (const w of r.writes) store[w.path] = w.data; };
+    for (let s = 0; s < 4; s++) run({ type: 'sit', seat: s, name: 'J' + t + s }, 'u' + s);
+    run({ type: 'start' }, 'u0');
+    while (d.status !== 'finished') {
+      const hands = [0, 1, 2, 3].map(s => store[T.handPath(path, d.hk, s)].cards);
+      for (let g = T.getGame(d, hands); g.phase !== 'done'; g = T.getGame(d, hands)) {
+        const a = g.phase === 'bid' ? { type: 'bid', bid: E.botBid(g, g.turn) } : { type: 'card', card: E.botPlay(g, g.turn) };
+        run({ ...a, seat: g.turn, hands }, 'u' + g.turn);
+      }
+      run({ type: 'next' }, 'u0');
+    }
+  }
+  const results = Object.entries(store).filter(([k]) => k.includes('/results/')).map(([, v]) => v);
+  assert.equal(results.length, 64);
+  for (let t = 0; t < 4; t++) assert.equal(results.filter(r => r.table === t).length, 16);
+  const B = E.tourStats(results, 4, 4);
+  assert.equal(B.complete, true);
+  assert.equal(B.field.deals, 16);
+  B.pairs.forEach(p => { assert.equal(p.played, 16); assert.equal(p.compared, 16); assert.equal(p.pct, 50); }); // mêmes IA partout
+  assert.equal(B.players.length, 16);
+  B.players.forEach(p => { assert.equal(p.name, 'J' + p.table + p.seat); assert.equal(p.withBids, 16); assert.equal(p.peers, 3); assert.ok(p.styles.length); });
+  assert.ok(results.every(r => Array.isArray(r.bids) && r.seats.length === 4));
 });

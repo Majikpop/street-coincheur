@@ -394,10 +394,173 @@ const E = (() => {
     return lines;
   }
 
+  /**
+   * Bilan joueur par joueur. En duplicate, le Sud de chaque table a reçu exactement les mêmes cartes :
+   * chaque joueur est comparé aux joueurs assis à la même place sur les autres tables (ses « pairs »).
+   * Les enchères détaillées (r.bids) n'existent que pour les résultats enregistrés depuis le bilan ; sans elles,
+   * seuls contrats, coinches et belotes sont comptés.
+   */
+  function playerStats(results, tables, mp = matchpoints(results)) {
+    const nameOf = (r, s) => (r.seats && r.seats[s]) || ((s % 2 ? r.names?.ew : r.names?.ns) || '').split(' & ')[s < 2 ? 0 : 1] || SEAT_NAME[SEATS[s]];
+    const byDeal = {};
+    for (const r of results) (byDeal[r.deal] = byDeal[r.deal] || []).push(r);
+    const players = [];
+    for (let t = 0; t < tables; t++) for (let s = 0; s < 4; s++) {
+      const p = { table: t, seat: s, side: s % 2 ? 'EO' : 'NS', name: SEAT_NAME[SEATS[s]], played: 0, withBids: 0,
+        bidDeals: 0, bids: 0, bidSum: 0, maxBid: 0, opened: 0, suits: {}, declarer: 0, made: 0, failed: 0, declPctSum: 0, declPctN: 0,
+        coinches: 0, coincheWon: 0, surcoinches: 0, belotes: 0, capots: 0, alone: 0, missed: 0, higher: 0, duels: 0 };
+      for (const r of results) if (r.table === t) {
+        p.played++; p.name = nameOf(r, s);
+        const tm = s % 2, c = r.contract;
+        if (r.bids) {
+          p.withBids++;
+          const mine = r.bids.filter(b => b.seat === s && b.type === 'bid');
+          if (mine.length) p.bidDeals++;
+          for (const b of mine) { p.bids++; p.bidSum += b.value; p.maxBid = Math.max(p.maxBid, b.value); p.suits[b.suit] = (p.suits[b.suit] || 0) + 1; }
+          const first = r.bids.find(b => b.type === 'bid');
+          if (first && first.seat === s) p.opened++;
+          if (r.bids.some(b => b.seat === s && b.type === 'surcoinche')) p.surcoinches++;
+        }
+        const coinchedBy = r.coincheBy ?? (r.bids ? (r.bids.find(b => b.type === 'coinche') || {}).seat : undefined);
+        if (c && c.coinche >= 2 && coinchedBy === s) { p.coinches++; if (!r.made) p.coincheWon++; }
+        if (r.beloteSeat === s) p.belotes++;
+        if (c && c.seat === s) {
+          p.declarer++; if (r.made) p.made++; else p.failed++;
+          if (r.cardPts && r.cardPts[tm] === 250) p.capots++;
+          const m = mp[r.deal][t], pct = tm ? m.ewPct : m.nsPct;
+          if (pct !== null) { p.declPctSum += pct; p.declPctN++; }
+        }
+        // mêmes cartes, autres tables : a-t-il pris quand les autres passaient, ou l'inverse ?
+        const peers = byDeal[r.deal].filter(o => o.table !== t);
+        if (peers.length) {
+          p.duels++;
+          const peerTook = peers.filter(o => o.contract && o.contract.seat === s);
+          if (c && c.seat === s && !peerTook.length) p.alone++;
+          if (!(c && c.seat === s) && peerTook.length * 2 > peers.length) p.missed++;
+          if (c && c.seat === s && peerTook.length && c.value > Math.max(...peerTook.map(o => o.contract.value))) p.higher++;
+        }
+      }
+      p.bidRate = p.withBids ? p.bidDeals / p.withBids : null;
+      p.avgBid = p.bids ? p.bidSum / p.bids : null;
+      p.declRate = p.played ? p.declarer / p.played : null;
+      p.successRate = p.declarer ? p.made / p.declarer : null;
+      p.declPct = p.declPctN ? p.declPctSum / p.declPctN : null;
+      p.coincheRate = p.played ? p.coinches / p.played : null;
+      const fav = Object.entries(p.suits).sort((a, b) => b[1] - a[1])[0];
+      p.favSuit = fav ? fav[0] : null;
+      players.push(p);
+    }
+    const avg = (xs, k) => { const v = xs.map(x => x[k]).filter(x => x !== null && x !== undefined); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+    for (const p of players) {
+      const peers = players.filter(o => o.seat === p.seat && o.table !== p.table && o.played);
+      p.peers = peers.length;
+      p.vs = {};
+      for (const k of ['bidRate', 'avgBid', 'declRate', 'successRate', 'declPct', 'coincheRate', 'opened', 'declarer', 'coinches', 'belotes']) p.vs[k] = avg(peers, k);
+      p.styles = playerStyles(p);
+    }
+    return players;
+  }
+
+  /** Traits de jeu d'un joueur, du plus marquant au plus discret (au moins un). */
+  function playerStyles(p) {
+    const out = [], vs = p.vs, gt = (a, b, d) => a !== null && b !== null && a - b > d;
+    if (p.coinches >= 2 && (vs.coinches === null || p.coinches >= vs.coinches * 1.5)) out.push('coincheur');
+    if (p.declarer >= 3 && p.successRate === 1) out.push('sniper');
+    const bold = gt(p.bidRate, vs.bidRate, 0.12) || (p.bids >= 3 && gt(p.avgBid, vs.avgBid, 10)) || (p.alone >= 2 && p.alone > p.missed);
+    const shy = gt(vs.bidRate, p.bidRate, 0.12) || (p.missed >= 2 && p.missed > p.alone);
+    if (bold && !shy) out.push('fonceur');
+    if (p.failed >= 2 && p.successRate !== null && p.successRate < 0.6) out.push('kamikaze');
+    if (shy && !bold) out.push('prudent');
+    if (p.capots) out.push('capot');
+    if (p.declarer === 0 && p.played) out.push('partenaire');
+    if (p.belotes >= 2) out.push('belote');
+    if (!out.length) out.push('equilibre');
+    return out;
+  }
+
+  /**
+   * Bilan de fin de tournoi. Une paire = une ligne (table, NS ou EO) : elle reste à sa table, les séries tournent.
+   * Pour chaque paire : classement, victoires à la table (score brut), contrats pris et défendus, coinches, capots,
+   * écart cumulé à la moyenne des autres tables, meilleure et pire donne, pourcentage par tour.
+   * Pour le tournoi : totaux, contrats par couleur, donnes les plus disputées, distinctions.
+   */
+  function tourStats(results, tables, perSet) {
+    const mp = matchpoints(results), st = standings(results, tables);
+    const pairs = st.map(l => ({
+      table: l.table, side: l.side, names: l.names, pct: l.pct, played: l.played, compared: l.compared, rank: null,
+      won: 0, lost: 0, tied: 0, points: 0, net: 0, tops: 0, zeros: 0,
+      taken: 0, made: 0, failed: 0, defended: 0, sets: 0, coinched: 0, coincheWon: 0, coinchedAgainst: 0, capots: 0, belotes: 0,
+      best: null, worst: null, byRound: Array.from({ length: tables }, () => ({ sum: 0, n: 0, pct: null })),
+    }));
+    const pairOf = (t, tm) => pairs[t * 2 + tm];
+    for (const side of ['NS', 'EO']) {
+      const ranked = pairs.filter(p => p.side === side && p.pct !== null).sort((a, b) => b.pct - a.pct);
+      ranked.forEach((p, i) => { p.rank = i && ranked[i - 1].pct === p.pct ? ranked[i - 1].rank : i + 1; });
+    }
+    const field = { deals: new Set(results.map(r => r.deal)).size, expectedDeals: tables * perSet, expected: tables * tables * perSet, results: results.length,
+      contracts: 0, made: 0, passed: 0, coinches: 0, surcoinches: 0, capots: 0, bySuit: {} };
+    for (const s of CONTRACTS) field.bySuit[s] = { n: 0, made: 0 };
+    for (const r of results) {
+      const m = mp[r.deal][r.table];
+      const round = (Math.floor(r.deal / perSet) - r.table + tables) % tables;
+      for (const tm of [0, 1]) {
+        const p = pairOf(r.table, tm), mine = tm ? r.ew : r.ns, theirs = tm ? r.ns : r.ew;
+        p.points += mine;
+        if (mine > theirs) p.won++; else if (mine < theirs) p.lost++; else p.tied++;
+        const pct = tm ? m.ewPct : m.nsPct;
+        p.net += tm ? -m.diff : m.diff;
+        if (pct !== null) {
+          if (pct === 100) p.tops++; if (pct === 0) p.zeros++;
+          const cell = p.byRound[round]; cell.sum += pct; cell.n++;
+          const line = { deal: r.deal, pct, diff: tm ? -m.diff : m.diff, contract: r.contract, made: r.made };
+          if (!p.best || line.diff > p.best.diff) p.best = line;
+          if (!p.worst || line.diff < p.worst.diff) p.worst = line;
+        }
+        if (r.cardPts && r.cardPts[tm] === 250) p.capots++;
+        if (r.belote === tm || (r.beloteSeat != null && team(r.beloteSeat) === tm)) p.belotes++;
+      }
+      if (!r.contract) { field.passed++; continue; }
+      const att = team(r.contract.seat), A = pairOf(r.table, att), D = pairOf(r.table, 1 - att), k = r.contract.coinche || 1;
+      field.contracts++; field.bySuit[r.contract.suit].n++;
+      if (r.made) { field.made++; field.bySuit[r.contract.suit].made++; }
+      if (k >= 2) field.coinches++; if (k === 4) field.surcoinches++;
+      if (r.cardPts && r.cardPts.includes(250)) field.capots++;
+      A.taken++; D.defended++;
+      if (r.made) A.made++; else { A.failed++; D.sets++; }
+      if (k >= 2) { D.coinched++; A.coinchedAgainst++; if (!r.made) D.coincheWon++; }
+    }
+    for (const p of pairs) for (const c of p.byRound) c.pct = c.n ? c.sum / c.n : null;
+
+    // donnes les plus disputées : plus grand écart entre la meilleure et la pire table (côté NS)
+    const swings = Object.entries(mp).map(([deal, byT]) => {
+      const rs = results.filter(r => r.deal === +deal).sort((a, b) => (b.ns - b.ew) - (a.ns - a.ew));
+      return { deal: +deal, spread: rs.length > 1 ? (rs[0].ns - rs[0].ew) - (rs[rs.length - 1].ns - rs[rs.length - 1].ew) : 0, lines: rs };
+    }).filter(s => s.lines.length > 1).sort((a, b) => b.spread - a.spread || a.deal - b.deal);
+
+    // distinctions : la paire en tête sur un critère, départagée par le classement puis la table
+    const pick = (score, min = 1) => {
+      const c = pairs.filter(p => score(p) >= min).sort((a, b) => score(b) - score(a) || (b.pct ?? -1) - (a.pct ?? -1) || a.table - b.table);
+      return c[0] || null;
+    };
+    const rate = p => (p.taken >= 3 ? p.made / p.taken : -1);
+    const awards = [];
+    const add = (key, title, p, value, detail) => { if (p) awards.push({ key, title, table: p.table, side: p.side, names: p.names, value, detail }); };
+    let p = pick(rate, 0); add('preneur', 'Meilleur preneur', p, p && rate(p), p && `${p.made}/${p.taken} contrats réussis`);
+    p = pick(x => x.sets); add('defense', 'Défense de fer', p, p && p.sets, p && `${p.sets} contrat${p.sets > 1 ? 's' : ''} adverse${p.sets > 1 ? 's' : ''} mis dedans`);
+    p = pick(x => x.coincheWon); add('coinche', "Coincheur d'or", p, p && p.coincheWon, p && `${p.coincheWon} coinche${p.coincheWon > 1 ? 's' : ''} gagnante${p.coincheWon > 1 ? 's' : ''} sur ${p.coinched}`);
+    p = pick(x => x.capots); add('capot', 'Roi du capot', p, p && p.capots, p && `${p.capots} capot${p.capots > 1 ? 's' : ''}`);
+    p = pick(x => (x.best ? x.best.diff : -Infinity), -Infinity);
+    add('coup', 'Plus beau coup', p && p.best ? p : null, p && p.best && p.best.diff, p && p.best && `donne ${p.best.deal + 1} : ${Math.round(p.best.diff)} points de mieux que la moyenne`);
+    p = pick(x => (x.compared ? -x.zeros : -Infinity), -Infinity);
+    add('regulier', 'Pas un zéro', p && !p.zeros ? p : null, 0, 'aucune donne au plus bas');
+
+    return { pairs, field, swings, awards, players: playerStats(results, tables, mp), complete: field.results >= field.expected };
+  }
+
   return {
     SUITS, CONTRACTS, SYM, SUIT_NAME, RANK_FR, SEATS, SEAT_NAME, BID_VALUES, team, partner, next,
     hashStr, makeDeal, newGame, legalBidOptions, applyBid, legalCards, playCard, trickWinner, points, sortHand, sameCard,
-    scoreDeal, botBid, botPlay, setForTable, dealsOfSet, matchpoints, standings,
+    scoreDeal, botBid, botPlay, setForTable, dealsOfSet, matchpoints, standings, tourStats, playerStats,
   };
 })();
 if (typeof module !== 'undefined') module.exports = E;

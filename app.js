@@ -133,6 +133,7 @@ function route() {
   if (h.has('r')) openRoom(h.get('r').toUpperCase());
   else if (h.has('local')) openLocal();
   else if (h.has('t') && h.has('n')) { openTour(h.get('t')); openTable(NET, `tournaments/${h.get('t')}/tables/t${+h.get('n')}`, () => (S.tour ? T.initTour(S.tour, +h.get('n')) : null), { kind: 'tour', n: +h.get('n') }); }
+  else if (h.has('t') && h.has('b')) { openTour(h.get('t')); S.view = 'bilan'; }
   else if (h.has('t')) { openTour(h.get('t')); S.view = 'tour'; }
   else if (h.has('new')) { S.form = { name: '', tables: 2, perSet: 8 }; S.view = 'create'; }
   else { S.view = 'home'; }
@@ -446,6 +447,11 @@ function tableStatus(t, n) {
   return `Tour ${d.round + 1} · série ${LETTER(set)} · ${setProgress(n, set)}/${t.perSet}`;
 }
 
+const tourDone = t => S.results.length >= t.tables * t.tables * t.perSet;
+const bilanLink = t => tourDone(t)
+  ? `<button class="bilan-cta sheet" data-a="go" data-h="t=${esc(t.id)}&b=1"><span class="stack" style="gap:2px"><span class="eyebrow">Tournoi terminé</span><b>Voir le bilan</b><span class="muted small">Podium, distinctions, portrait de chaque joueur</span></span><span class="chev" aria-hidden="true">›</span></button>`
+  : `<button class="btn ghost" data-a="go" data-h="t=${esc(t.id)}&b=1">Bilan provisoire</button>`;
+
 function viewTour() {
   const t = S.tour;
   if (!t) return `<div class="wrap">${back('Tournois', '')}<p class="muted">${S.net === 'connecting' ? 'Chargement…' : 'Tournoi introuvable.'}</p></div>`;
@@ -481,6 +487,7 @@ function viewTour() {
     <div class="stack" style="gap:4px"><p class="eyebrow">Tournoi duplicate</p><h1>${esc(t.name)}</h1>
       <p class="muted small">${t.tables} tables · séries de ${t.perSet} donnes · ${S.results.length} résultat${S.results.length > 1 ? 's' : ''}</p></div>
     ${errBox()}
+    ${S.results.length ? bilanLink(t) : ''}
     ${shareBox(`Tournoi « ${t.name} » : choisis ta table`, 't=' + t.id)}
     <section class="section"><h2>Tables</h2><div class="sheet list">${tables}</div></section>
     <section class="section"><h2>Classement</h2>
@@ -492,6 +499,118 @@ function viewTour() {
       ? `<p><b>Supprimer « ${esc(t.name)} » ?</b> <span class="muted small">Les tables${S.results.length ? `, les ${S.results.length} résultat${S.results.length > 1 ? 's' : ''}` : ''} et le classement seront effacés pour tout le monde. Impossible de revenir en arrière.</span></p>
         <div class="row"><button class="btn danger" data-a="killTour" data-id="${esc(t.id)}" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Suppression…' : 'Oui, supprimer'}</button><button class="btn ghost" data-a="confirm" data-c="">Annuler</button></div>`
       : `<p class="muted small">Tournoi abandonné, qui ne sera pas fini ?</p><button class="btn danger" data-a="confirm" data-c="kill">Kill</button>`}</section>
+  </div>`;
+}
+
+/* ---------- Bilan de fin de tournoi ---------- */
+const pc = x => x === null || x === undefined ? '–' : Math.round(x * 100) + ' %';
+const signed = x => (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(Math.round(x));
+const plural = (n, w) => `${n} ${w}${n > 1 ? 's' : ''}`;
+const sideName = s => (s === 'NS' ? 'Nord-Sud' : 'Est-Ouest');
+// Portrait d'un joueur : un titre et une phrase par trait de jeu, comparés aux joueurs de la même place sur les autres tables.
+const STYLE = {
+  coincheur: ['La gâchette', p => p.coincheWon ? `${plural(p.coinches, 'coinche')}, dont ${p.coincheWon} gagnante${p.coincheWon > 1 ? 's' : ''}. Les preneurs adverses s'en souviendront.` : `${plural(p.coinches, 'coinche')} tentées : aucune n'a fait mouche, mais les preneurs adverses ont tremblé.`],
+  sniper: ['Le sniper', p => `${p.declarer} contrats joués, ${p.declarer} réussis. Quand ${esc(p.name)} annonce, ça tombe.`],
+  fonceur: ['Le fonceur', p => p.bidRate !== null && p.vs.bidRate !== null ? `Annonce sur ${pc(p.bidRate)} des donnes, contre ${pc(p.vs.bidRate)} pour les autres ${E.SEAT_NAME[E.SEATS[p.seat]]}. Rien ne fait peur à ${esc(p.name)}.` : `${plural(p.alone, 'contrat')} pris là où les autres ont passé avec les mêmes cartes.`],
+  kamikaze: ['Le kamikaze', p => `${plural(p.failed, 'chute')} sur ${p.declarer} contrats : du panache avant tout. Sans prise de risque, pas de top !`],
+  prudent: ['Le stratège', p => p.bidRate !== null && p.vs.bidRate !== null ? `Annonce sur ${pc(p.bidRate)} des donnes (les autres ${E.SEAT_NAME[E.SEATS[p.seat]]} : ${pc(p.vs.bidRate)}). ${esc(p.name)} ne parle que quand ça vaut le coup.` : `A laissé passer ${plural(p.missed, 'contrat')} que les autres ont joué : la prudence avant tout.`],
+  capot: ['Le roi du capot', p => `${plural(p.capots, 'capot')} à son nom : tous les plis, rien pour les autres.`],
+  partenaire: ['Le partenaire en or', p => `Aucun contrat à son nom : ${esc(p.name)} a laissé la main et soutenu son partenaire jusqu'au bout.`],
+  belote: ['Belote, rebelote', p => `${plural(p.belotes, 'belote')} en main : les rois et les dames étaient de son côté.`],
+  equilibre: ['Le pilier', p => `Ni trop, ni trop peu : ${esc(p.name)} joue juste, au plus près des autres ${E.SEAT_NAME[E.SEATS[p.seat]]}.`],
+};
+const pairLbl = (tb, side) => `Table ${tb + 1} · ${side}`;
+
+function viewBilan() {
+  const t = S.tour;
+  if (!t) return `<div class="wrap">${back('Tournoi', '')}<p class="muted">${S.net === 'connecting' ? 'Chargement…' : 'Tournoi introuvable.'}</p></div>`;
+  const B = E.tourStats(S.results, t.tables, t.perSet), F = B.field;
+  if (!S.results.length) return `<div class="wrap">${back('Tournoi', 't=' + t.id)}<h1>Bilan</h1><p class="muted">Aucune donne jouée pour l'instant.</p></div>`;
+  const pairOf = (tb, side) => B.pairs.find(p => p.table === tb && p.side === side);
+
+  const tile = (v, l, sub) => `<div class="kpi"><span class="v num">${v}</span><span class="l">${l}</span>${sub ? `<span class="s">${sub}</span>` : ''}</div>`;
+  const kpis = `<div class="kpis">${tile(`${F.deals}/${F.expectedDeals}`, 'Donnes', `${F.results} résultats`)}
+    ${tile(F.contracts ? Math.round(F.made / F.contracts * 100) + '%' : '–', 'Contrats réussis', `${F.made} sur ${F.contracts}`)}
+    ${tile(F.coinches, 'Coinches', F.surcoinches ? plural(F.surcoinches, 'surcoinche') : 'aucune surcoinche')}
+    ${tile(F.capots, 'Capots', `${F.passed} donne${F.passed > 1 ? 's' : ''} passée${F.passed > 1 ? 's' : ''}`)}</div>`;
+
+  const podium = side => {
+    const ps = B.pairs.filter(p => p.side === side && p.rank).sort((a, b) => a.rank - b.rank).slice(0, 3);
+    return `<div class="podium sheet rk-${side.toLowerCase()}"><p class="eyebrow">Lignes ${sideName(side)}</p>${ps.map(p => `<div class="pod r${p.rank}">
+      <span class="pos">${p.rank === 1 ? '1ER' : p.rank + 'E'}</span><span class="who"><b>${esc(p.names)}</b><span class="muted small">Table ${p.table + 1} · ${p.won} donne${p.won > 1 ? 's' : ''} gagnée${p.won > 1 ? 's' : ''} à la table</span></span>
+      <span class="pct">${pctTxt(p.pct)}</span></div>`).join('')}</div>`;
+  };
+
+  const awards = B.awards.length ? `<div class="awards">${B.awards.map(a => `<div class="award sheet"><span class="eyebrow">${esc(a.title)}</span><b>${esc(a.names)}</b><span class="muted small">${esc(a.detail)}</span><span class="tag ${a.side.toLowerCase()}">${pairLbl(a.table, a.side)}</span></div>`).join('')}</div>` : '';
+
+  // Écart cumulé à la moyenne des autres tables : barres de part et d'autre de zéro
+  const maxNet = Math.max(1, ...B.pairs.map(p => Math.abs(p.net)));
+  const netChart = `<div class="sheet pad stack"><p class="small muted">Points marqués de plus (ou de moins) que la moyenne des autres tables, cumulés sur toutes les donnes. Même position, mêmes cartes : seul le jeu fait la différence.</p>
+    <div class="net" role="list">${B.pairs.slice().sort((a, b) => b.net - a.net).map(p => {
+      const w = Math.abs(p.net) / maxNet * 50;
+      return `<div class="nrow" role="listitem" title="${esc(p.names)} (${pairLbl(p.table, p.side)}) : ${signed(p.net)} points face à la moyenne">
+        <span class="nm"><b>${esc(p.names)}</b><span class="muted">${pairLbl(p.table, p.side)}</span></span>
+        <span class="track"><i class="${p.side.toLowerCase()} ${p.net < 0 ? 'neg' : ''}" style="width:${w}%;${p.net < 0 ? `right:50%` : `left:50%`}"></i></span>
+        <span class="nv num">${signed(p.net)}</span></div>`;
+    }).join('')}</div>
+    <div class="legend small muted"><span><i class="ns"></i>Nord-Sud</span><span><i class="eo"></i>Est-Ouest</span></div></div>`;
+
+  // Comparatif des paires, avec le pourcentage tour par tour
+  const heat = c => c.pct === null ? `<td class="h">–</td>` : `<td class="h" style="--a:${(Math.abs(c.pct - 50) / 50).toFixed(2)}" data-up="${c.pct >= 50 ? 1 : 0}">${Math.round(c.pct)}</td>`;
+  const order = B.pairs.slice().sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1));
+  const pairTable = `<div class="sched sheet"><table class="cmp"><thead><tr><th>Paire</th><th>%</th><th title="Donnes gagnées, nulles, perdues face à l'autre paire de la table">G-N-P</th><th title="Contrats pris (réussis)">Prises</th><th title="Contrats adverses mis dedans">Chutes inf.</th><th title="Coinches gagnantes / tentées">Coinches</th><th title="Donnes à 100 % / à 0 %">Tops</th>${Array.from({ length: t.tables }, (_, r) => `<th>T${r + 1}</th>`).join('')}</tr></thead><tbody>
+    ${order.map(p => `<tr><td><span class="dot ${p.side.toLowerCase()}"></span><b>${esc(p.names)}</b><br><span class="muted small">${pairLbl(p.table, p.side)}</span></td>
+      <td class="num">${pctTxt(p.pct)}</td><td class="num">${p.won}-${p.tied}-${p.lost}</td><td class="num">${p.taken} (${p.made})</td><td class="num">${p.sets}</td>
+      <td class="num">${p.coincheWon}/${p.coinched}</td><td class="num">${p.tops}/${p.zeros}</td>${p.byRound.map(heat).join('')}</tr>`).join('')}</tbody></table></div>
+    <p class="small muted">T1 à T${t.tables} : pourcentage de la paire à chaque tour (une série de ${t.perSet} donnes). Au-dessus de 50, en or ; en dessous, en rouge.</p>`;
+
+  // Portraits : un mot pour chaque joueur, ses annonces, et la comparaison avec la même place ailleurs
+  const cmpBar = (label, mine, theirs, fmt, max) => {
+    if (mine === null && theirs === null) return '';
+    const w = x => x === null ? 0 : Math.min(100, x / max * 100);
+    return `<div class="cmpbar"><span class="lb">${label}</span><span class="bars"><span class="b me" style="width:${w(mine)}%"></span><span class="b them" style="width:${w(theirs)}%"></span></span><span class="vv num"><b>${fmt(mine)}</b><i>${fmt(theirs)}</i></span></div>`;
+  };
+  const num1 = x => x === null ? '–' : (Math.round(x * 10) / 10).toString().replace('.', ',');
+  const portrait = p => {
+    const pair = pairOf(p.table, p.side), [title, line] = STYLE[p.styles[0]];
+    const seatN = E.SEAT_NAME[E.SEATS[p.seat]], partner = B.players.find(o => o.table === p.table && o.seat === E.partner(p.seat));
+    const win = pair.rank === 1 ? `<span class="crown">Vainqueur ${p.side} avec ${esc(partner.name)}</span>` : '';
+    const traits = p.styles.slice(1, 3).map(k => `<span class="trait">${STYLE[k][0]}</span>`).join('');
+    const bids = p.withBids ? `Annonce sur <b>${pc(p.bidRate)}</b> des donnes${p.avgBid !== null ? `, en moyenne à <b>${Math.round(p.avgBid)}</b>` : ''}${p.favSuit ? `, couleur préférée ${sym(p.favSuit)}` : ''}${p.opened ? ` · ouvre ${p.opened} fois` : ''}.` : 'Enchères détaillées non enregistrées pour ce tournoi.';
+    const duel = p.duels ? `Avec les mêmes cartes que les autres ${seatN} : ${p.alone ? `<b>${plural(p.alone, 'contrat')}</b> pris seul${p.alone > 1 ? 's' : ''}` : 'aucun contrat pris seul'}${p.missed ? `, ${plural(p.missed, 'contrat')} laissé${p.missed > 1 ? 's' : ''} aux autres` : ''}${p.higher ? `, ${p.higher} fois plus haut` : ''}.` : '';
+    return `<article class="portrait sheet ${p.side.toLowerCase()}">
+      <header><span class="avatar on" aria-hidden="true">${esc(p.name.charAt(0).toUpperCase())}</span><span class="stack" style="gap:2px"><b class="pn">${esc(p.name)}</b><span class="muted small">${seatN} · table ${p.table + 1} · ${esc(pair.names)} · ${pctTxt(pair.pct)}</span></span></header>
+      ${win}<p class="ptitle">${title}</p><p>${line(p)}</p>${traits ? `<div class="traits">${traits}</div>` : ''}
+      <p class="small muted">${bids} Preneur : ${p.declarer ? `${p.made}/${p.declarer} réussis${p.declPct !== null ? `, ${pctTxt(p.declPct)} en moyenne sur ses contrats` : ''}` : 'aucun contrat'}${p.coinches ? ` · ${plural(p.coinches, 'coinche')}` : ''}${p.belotes ? ` · ${plural(p.belotes, 'belote')}` : ''}.</p>
+      ${p.peers ? `<div class="vsbox"><p class="eyebrow">Face aux autres ${seatN} <span class="lg"><i class="me"></i>${esc(p.name)} <i class="them"></i>moyenne des ${p.peers}</span></p>
+        ${cmpBar('Annonce', p.bidRate, p.vs.bidRate, pc, 1)}
+        ${cmpBar('Contrats', p.declarer, p.vs.declarer, num1, Math.max(1, p.declarer, p.vs.declarer || 0))}
+        ${cmpBar('Réussite', p.successRate, p.vs.successRate, pc, 1)}
+        ${cmpBar('Coinches', p.coinches, p.vs.coinches, num1, Math.max(1, p.coinches, p.vs.coinches || 0))}</div>` : ''}
+      ${duel ? `<p class="small">${duel}</p>` : ''}</article>`;
+  };
+  const players = B.players.slice().sort((a, b) => a.table - b.table || [0, 2, 1, 3].indexOf(a.seat) - [0, 2, 1, 3].indexOf(b.seat));
+
+  const swings = B.swings.slice(0, 3).map(s => `<div class="sheet"><div class="row between pad" style="padding-bottom:6px"><b>Donne ${s.deal + 1}</b><span class="muted small">écart de ${s.spread} points entre tables</span></div>
+    <div class="sched"><table><thead><tr><th>Table</th><th>Contrat</th><th>NS</th><th>EO</th></tr></thead><tbody>
+    ${s.lines.map(r => `<tr><td>${r.table + 1}</td><td>${r.contract ? contractTxt(r.contract) + ' ' + E.SEATS[r.contract.seat] + (r.made ? ' ✓' : ' ✗') : 'Passée'}</td><td class="num">${r.ns}</td><td class="num">${r.ew}</td></tr>`).join('')}</tbody></table></div></div>`).join('');
+
+  const maxSuit = Math.max(1, ...Object.values(F.bySuit).map(x => x.n));
+  const suits = `<div class="sheet pad stack">${E.CONTRACTS.filter(s => F.bySuit[s].n).map(s => `<div class="cmpbar"><span class="lb">${sym(s)} <span class="muted small">${E.SUIT_NAME[s]}</span></span>
+    <span class="bars"><span class="b me" style="width:${F.bySuit[s].n / maxSuit * 100}%"></span></span><span class="vv num">${F.bySuit[s].made}/${F.bySuit[s].n}</span></div>`).join('')}
+    <p class="small muted">Contrats réussis / joués, par couleur d'atout.</p></div>`;
+
+  return `<div class="wrap bilan">${back('Tournoi', 't=' + t.id)}
+    <div class="stack" style="gap:4px"><p class="eyebrow">${B.complete ? 'Tournoi terminé' : `Bilan provisoire · ${F.results}/${F.expected} résultats`}</p><h1>Bilan · ${esc(t.name)}</h1>
+      <p class="muted small">${t.tables} tables · ${t.tables} séries de ${t.perSet} donnes · ${t.tables * t.perSet} donnes par table</p></div>
+    ${kpis}
+    <section class="section"><h2>Podium</h2>${podium('NS')}${podium('EO')}</section>
+    ${awards ? `<section class="section"><h2>Distinctions</h2>${awards}</section>` : ''}
+    <section class="section"><h2>Face à la moyenne</h2>${netChart}</section>
+    <section class="section"><h2>Paires comparées</h2>${pairTable}</section>
+    <section class="section"><h2>Joueurs</h2><p class="small muted">Chaque joueur face aux joueurs assis à la même place sur les autres tables : ils ont reçu exactement les mêmes cartes.</p>${players.map(portrait).join('')}</section>
+    ${swings ? `<section class="section"><h2>Donnes les plus disputées</h2>${swings}</section>` : ''}
+    <section class="section"><h2>Contrats par couleur</h2>${suits}</section>
   </div>`;
 }
 
@@ -535,7 +654,8 @@ function viewLobby(d, title, backH) {
     return `<div class="sc s${i} t${i % 2} ${s.uid || s.bot ? 'taken' : ''}"><span class="eyebrow">${label}</span><span class="avatar ${s.uid || s.bot ? 'on' : ''}" aria-hidden="true">${s.uid || s.bot ? esc(who) : '?'}</span>${body}</div>`;
   };
   let status = '';
-  if (d.status === 'finished') status = `<div class="sheet pad"><b>Toutes les séries de cette table sont jouées.</b> <span class="muted">Le classement complet est sur la page du tournoi.</span></div>`;
+  if (d.status === 'finished') status = `<div class="sheet pad"><b>Toutes les séries de cette table sont jouées.</b> <span class="muted">Le classement complet est sur la page du tournoi.</span>
+    ${S.tour ? `<p style="margin-top:10px"><button class="btn gold" data-a="go" data-h="t=${esc(S.tourId)}&b=1">${tourDone(S.tour) ? 'Voir le bilan' : 'Bilan provisoire'}</button></p>` : ''}</div>`;
   else if (!full) status = `<p class="muted small">Il faut 4 sièges occupés. Un joueur déjà assis peut prendre un second siège pour jouer en passe-et-joue ; le jeu se masque alors entre ses deux mains.</p>`;
   return `<div class="wrap">${back('Retour', backH)}
     <div class="select-title"><p class="eyebrow">${c.kind === 'tour' ? 'Tournoi duplicate' : 'Partie libre'} · ${title}</p><h1>Sélection des joueurs</h1>
@@ -706,7 +826,7 @@ function render() {
   const sc = window.scrollY;
   let html;
   if (S.view === 'table' && S.cur) html = viewTable();
-  else html = ({ home: viewHome, create: viewCreate, tour: viewTour }[S.view] || viewHome)();
+  else html = ({ home: viewHome, create: viewCreate, tour: viewTour, bilan: viewBilan }[S.view] || viewHome)();
   // Rien n'a changé : on garde le DOM tel quel, sinon un tap en cours sur un bouton remplacé est perdu.
   if (html === lastHtml) return;
   lastHtml = html;

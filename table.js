@@ -113,6 +113,9 @@ const T = (() => {
           table: d.table, deal: g.idx, set: Math.floor(g.idx / d.tour.perSet), ns: r.ns, ew: r.ew,
           contract: g.contract ? { value: g.contract.value, suit: g.contract.suit, seat: g.contract.seat, coinche: g.contract.coinche } : null,
           made: r.made, cardPts: r.cardPts, names: { ns: names(d, 0), ew: names(d, 1) }, at: Date.now(),
+          // pour le bilan : qui a dit quoi, qui a coinché, belote et plis
+          seats: d.seats.map((x, i) => x.name || E.SEAT_NAME[E.SEATS[i]]), bids: g.bids, coincheBy: g.contract ? g.contract.coincheBy ?? null : null,
+          beloteSeat: g.beloteSeat, tricks: r.tricks || null,
         },
       });
     }
