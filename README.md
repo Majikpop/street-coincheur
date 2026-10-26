@@ -36,9 +36,12 @@ Sans `config.js` rempli, le jeu fonctionne hors ligne (parties sur le téléphon
 | `firestore.rules` | Règles d'accès Firestore |
 | `test/engine.test.js` | Tests du moteur (donnes complètes, score, coinche/surcoinche, duplicate) |
 | `test/profile.test.js` | Tests des profils (fiches écrites en fin de donne, stats, classements, hall of fame) |
+| `tools/bench.js` | Banc d'essai de l'IA : statistiques d'enchères, duplicate contre une autre version, recalibrage du modèle d'annonce |
 
 ## Tests
 Aucune dépendance, Node 18 ou plus : `npm test` (ou `node --test`).
+
+Niveau de l'IA : `npm run bench`. Pour comparer à la version en ligne : `git show main:engine.js > /tmp/ancien.js` puis `npm run bench -- --vs /tmp/ancien.js` (écart moyen par donne en duplicate, camps inversés sur chaque donne).
 
 ## Limites connues (V1 pilote)
 - Pas d'annonces de carrés ou suites (enchères à la couleur, sans atout et tout atout disponibles).

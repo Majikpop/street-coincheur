@@ -225,7 +225,11 @@ const E = (() => {
   }
 
   // ===== IA =====
-  function evalSuit(hand, t) {
+  // Réglages de l'IA, ajustés au banc d'essai (tools/bench.js)
+  // margin : gain minimal pour annoncer ; pOpp : chance supposée qu'un contrat adverse passe ;
+  // coinche, sur : gain minimal pour coincher, pour surcoincher.
+  const TUNE = { margin: 10, pOpp: 0.7, coinche: 0, sur: 0 };
+  function evalSuit(hand, t, noBelote = false) {
     const tr = hand.filter(c => c.s === t);
     const w = { J: 25, '9': 18, A: 12, '10': 8, K: 5, Q: 5, '8': 2, '7': 2 };
     let est = tr.reduce((a, c) => a + w[c.r], 0) + 10 * tr.length;
@@ -234,27 +238,55 @@ const E = (() => {
       if (sc.some(c => c.r === 'A')) { est += 12; if (sc.some(c => c.r === '10')) est += 6; }
       if (!sc.length && tr.length >= 3) est += 6; // coupe franche
     }
-    if (tr.some(c => c.r === 'K') && tr.some(c => c.r === 'Q')) est += 15;
+    if (!noBelote && tr.some(c => c.r === 'K') && tr.some(c => c.r === 'Q')) est += 15;
     return { est, n: tr.length, J: tr.some(c => c.r === 'J'), nine: tr.some(c => c.r === '9') };
   }
+
+  /* Modèle d'annonce calibré par simulation (npm run bench -- --calib) : avec l'IA à la carte, le preneur fait
+   * environ 38 + 0,855 × évaluation points (belote comprise), à un écart près tiré de ces 20 quantiles. */
+  const RESID = [-53, -41, -34, -29, -24, -20, -16, -12, -8, -4, -1, 3, 7, 11, 16, 21, 27, 34, 44, 64];
+  /** Écart moyen attendu (preneur − défense) pour un contrat v joué avec une main évaluée à est. */
+  function contractEV(est, v, m = 1) {
+    let ev = 0;
+    for (const r of RESID) {
+      const T = Math.max(0, Math.min(182, 38 + 0.855 * est + r));
+      ev += T >= v && T >= 82 ? (m === 1 ? v + 2 * T - 162 : 160 + v * m) : -(160 + v * m);
+    }
+    return ev / RESID.length;
+  }
+
+  /* Coinche : probabilité que le contrat adverse chute, vue de la main du défenseur (régression logistique
+   * calibrée par simulation) ; on coinche quand le gain espéré (+v si chute) dépasse la perte (≈ 272 − v si réussi). */
+  function defenseScore(hand, t) {
+    const tr = hand.filter(c => c.s === t), has = (r, s) => hand.some(c => c.r === r && c.s === s);
+    return (has('J', t) ? 20 : 0) + (has('9', t) ? 14 : 0) + (has('A', t) ? 8 : 0) + 6 * tr.length
+      + SUITS.filter(s => s !== t).reduce((a, s) => a + (has('A', s) ? 10 : 0) + (has('10', s) ? 4 : 0), 0);
+  }
+  const pFail = (hand, c) => 1 / (1 + Math.exp(2.2 - 0.0477 * defenseScore(hand, c.suit) - 0.0218 * (c.value - 100)));
+  const coincheEV = (hand, c) => { const p = pFail(hand, c); return p * c.value - (1 - p) * (272 - c.value); };
 
   function botBid(g, seat) {
     const d = botBidNormal(g, seat), opts = legalBidOptions(g, seat);
     if (d.type !== 'pass' || opts.pass) return d;
-    // MOC : monter d'un cran si la main tient (toujours face à son partenaire), sinon coincher
+    // MOC : monter d'un cran (toujours face à son partenaire) ou coincher, selon ce qui coûte le moins
     const cur = g.contract, v = opts.values[0], hand = g.hands[seat];
-    const ranked = SUITS.map(s => ({ s, e: evalSuit(hand, s) })).sort((a, b) => b.e.est - a.e.est)[0];
+    const ranked = SUITS.map(s => ({ s, e: evalSuit(hand, s, g.noBelote) })).sort((a, b) => b.e.est - a.e.est)[0];
     const withPartner = cur && cur.seat === partner(seat);
-    if (v !== undefined && (!opts.coinche || withPartner || (v <= 130 && ranked.e.est >= 70 + (v - 80)))) {
-      return { type: 'bid', value: v, suit: withPartner ? cur.suit : ranked.s };
-    }
-    return opts.coinche ? { type: 'coinche' } : { type: 'bid', value: v, suit: ranked.s };
+    if (v !== undefined && (!opts.coinche || withPartner)) return { type: 'bid', value: v, suit: withPartner ? cur.suit : ranked.s };
+    if (v === undefined) return { type: 'coinche' };
+    const bidEV = contractEV(ranked.e.est, v);
+    const p = SUITS.includes(cur.suit) ? pFail(hand, cur) : 0.3, coEV = (2 * p - 1) * (160 + 2 * cur.value);
+    return bidEV > coEV ? { type: 'bid', value: v, suit: ranked.s } : { type: 'coinche' };
   }
 
   function botBidNormal(g, seat) {
     const opts = legalBidOptions(g, seat);
-    if (g.surQueue) return { type: 'pass' };
     const hand = g.hands[seat], cur = g.contract;
+    if (g.surQueue) { // surcoincher si la main tient encore malgré la coinche (qui annonce du jeu en face)
+      if (cur.seat !== seat || !SUITS.includes(cur.suit)) return { type: 'pass' };
+      const est = evalSuit(hand, cur.suit, g.noBelote).est - 15;
+      return contractEV(est, cur.value, 4) > contractEV(est, cur.value, 2) + TUNE.sur ? { type: 'surcoinche' } : { type: 'pass' };
+    }
     const myPrev = g.bids.filter(b => b.seat === seat && b.type === 'bid').length;
     // soutien du partenaire
     if (cur && cur.seat === partner(seat) && !myPrev && SUITS.includes(cur.suit)) {
@@ -268,20 +300,21 @@ const E = (() => {
     }
     if (cur && cur.seat === partner(seat)) return { type: 'pass' };
     // coinche défensive
-    if (opts.coinche && cur.value >= 100 && SUITS.includes(cur.suit)) {
-      const e = evalSuit(hand, cur.suit);
-      const aces = SUITS.filter(s => s !== cur.suit && hand.some(c => c.s === s && c.r === 'A')).length;
-      if (e.n >= 3 && (e.J || e.nine) && aces >= 1) return { type: 'coinche' };
-    }
+    if (opts.coinche && SUITS.includes(cur.suit) && coincheEV(hand, cur) > TUNE.coinche) return { type: 'coinche' };
+    // Annonce à la couleur : la plus rentable d'après le modèle, si elle vaut mieux que passer
+    // (0 sans contrat ; face à un contrat adverse, ce que rapporte en moyenne de le laisser jouer).
+    const alt = cur ? -(TUNE.pOpp * (cur.value + 40) - (1 - TUNE.pOpp) * (160 + cur.value)) : 0;
     let best = null;
     for (const s of SUITS) {
-      const e = evalSuit(hand, s);
-      if (e.n < 3 && !(e.n === 2 && e.J && e.nine)) continue;
-      if (!e.J && !(e.nine && e.n >= 3)) continue;
-      if (e.est < 88) continue;
-      const v = Math.min(160, 80 + Math.floor((e.est - 88) / 11) * 10);
-      if (!best || v > best.value) best = { value: v, suit: s };
+      const e = evalSuit(hand, s, g.noBelote);
+      if (e.n < 2 || !(e.J || e.nine)) continue;
+      for (const v of opts.values) {
+        if (v > 160) break;
+        const ev = contractEV(e.est, v);
+        if (ev > alt + TUNE.margin && (!best || ev > best.ev)) best = { value: v, suit: s, ev };
+      }
     }
+    if (best) delete best.ev;
     // Tout atout : beaucoup de valets et de 9 ; sans atout : as et 10 secs dans plusieurs couleurs
     const has = (r, s) => hand.some(c => c.r === r && c.s === s);
     const J = SUITS.filter(s => has('J', s)).length, N = SUITS.filter(s => has('9', s)).length;
@@ -403,7 +436,7 @@ const E = (() => {
   return {
     SUITS, CONTRACTS, SYM, SUIT_NAME, RANK_FR, SEATS, SEAT_NAME, BID_VALUES, team, partner, next,
     hashStr, makeDeal, newGame, legalBidOptions, canCoinche, applyBid, legalCards, playCard, trickWinner, points, sortHand, sameCard,
-    scoreDeal, botBid, botPlay, setForTable, dealsOfSet, matchpoints, standings,
+    scoreDeal, evalSuit, TUNE, botBid, botPlay, setForTable, dealsOfSet, matchpoints, standings,
   };
 })();
 if (typeof module !== 'undefined') module.exports = E;
