@@ -228,6 +228,14 @@ input[type=text]::placeholder { color: var(--dim); }
 .acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .acts .btn { padding: 12px 8px; }
 .res-head { display: flex; flex-direction: column; gap: 2px; }
+/* Fin de donne : tout l'écran de validation tient sans défiler (tapis réduit, main vide masquée) */
+.game.done .felt { height: clamp(170px, 26dvh, 260px); }
+.game.done .handzone { display: none; }
+.game.done .panel { gap: 8px; padding-block: 10px; padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+.game.done .verdict { font-size: 1.5rem; }
+.game.done .scoreline > div { padding: 6px 10px; }
+.game.done .scoreline .big { font-size: 1.8rem; margin-block: 2px; }
+.reslinks { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; }
 .verdict { font-family: var(--f-display); font-size: 1.8rem; text-transform: uppercase; transform: skewX(-8deg); transform-origin: left; }
 .verdict.ok { color: var(--ok); text-shadow: 3px 3px 0 #05061a; }
 .verdict.bad { color: var(--bad); text-shadow: 3px 3px 0 #05061a; }
@@ -312,6 +320,9 @@ input[type=text]::placeholder { color: var(--dim); }
 .moc.on .mbox { background: var(--hot); border-color: var(--hot); color: #fff; }
 .mocline { font-family: var(--f-display); text-transform: uppercase; color: var(--hot); font-size: .85rem; }
 .mocb { font-family: var(--f-hud); font-weight: 400; color: var(--hot); }
+.moc.opt.on { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 12%, var(--bg-2)); }
+.moc.opt b { color: var(--gold); }
+.moc.opt.on .mbox { background: var(--gold); border-color: var(--gold); color: #261700; }
 
 /* ---- Nouvelle version disponible ---- */
 .upd { position: fixed; z-index: 50; left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); border: 0; border-radius: 8px; padding: 10px 16px; background: var(--gold); color: #261700; font-family: var(--f-game); font-weight: 700; font-size: .95rem; letter-spacing: .03em; text-transform: uppercase; box-shadow: 0 4px 14px rgba(0,0,0,.5); white-space: nowrap; }

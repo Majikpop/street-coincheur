@@ -190,7 +190,7 @@ async function createRoom() {
 }
 async function createTournament() {
   const f = S.form, id = 't' + Date.now().toString(36) + rnd().slice(0, 4);
-  const tour = { id, name: f.name.trim() || 'Tournoi du ' + new Date().toLocaleDateString('fr-FR'), tables: f.tables, perSet: f.perSet, owner: NET.uid, createdAt: Date.now() };
+  const tour = { id, name: f.name.trim() || 'Tournoi du ' + new Date().toLocaleDateString('fr-FR'), tables: f.tables, perSet: f.perSet, ...(f.belote === false ? { belote: false } : {}), owner: NET.uid, createdAt: Date.now() };
   S.busy = true; render();
   try { await NET.set('tournaments/' + id, tour); await NET.setMany(T.tourHands(tour, rnd() + rnd())); S.busy = false; go('t=' + id); }
   catch (e) { S.busy = false; S.err = 'Création impossible (' + (e.code || e.message) + ').'; render(); }
@@ -342,7 +342,7 @@ function viewHome() {
     ? `<div class="item kill-row"><span class="small"><b>Supprimer « ${esc(t.name)} » ?</b> <span class="muted">Tables et résultats effacés pour tout le monde.</span></span>
       <span class="row"><button class="btn danger sm" data-a="killTour" data-id="${esc(t.id)}" ${S.busy ? 'disabled' : ''}>${S.busy ? '…' : 'Oui'}</button><button class="btn ghost sm" data-a="confirm" data-c="">Non</button></span></div>`
     : `<div class="item tour-row"><button class="tour-open" data-a="go" data-h="t=${esc(t.id)}">
-      <span class="stack" style="gap:2px"><b>${esc(t.name)}</b><span class="meta">${t.tables} table${t.tables > 1 ? 's' : ''} · séries de ${t.perSet} donnes</span></span>
+      <span class="stack" style="gap:2px"><b>${esc(t.name)}</b><span class="meta">${t.tables} table${t.tables > 1 ? 's' : ''} · séries de ${t.perSet} donnes${t.belote === false ? ' · sans belote' : ''}</span></span>
       <span class="chev" aria-hidden="true">›</span></button><button class="btn danger sm" data-a="confirm" data-c="kill:${esc(t.id)}" aria-label="Supprimer le tournoi ${esc(t.name)}">Kill</button></div>`).join('');
   const online = S.net === 'online';
   return `<div class="wrap">
@@ -407,7 +407,12 @@ function freeOptions() {
   const chips = [500, 1000, 1500, 2000].map(v => `<button class="chip ${o.target === v ? 'on' : ''}" data-a="optTarget" data-v="${v}" aria-pressed="${o.target === v}">${v}</button>`).join('');
   return `<div class="opts"><div class="field"><label>Partie en</label><div class="chips">${chips}</div></div>
     <button class="moc ${o.moc ? 'on' : ''}" data-a="optMoc" aria-pressed="${o.moc}"><span class="mbox" aria-hidden="true">${o.moc ? '✓' : ''}</span>
-      <span><b>Mode MOC</b> · Monte ou Coinche<br><span class="muted small">Interdit de passer, dès l'entame : on surenchérit ou on coinche. Seule une coinche arrête l'enchère.</span></span></button></div>`;
+      <span><b>Mode MOC</b> · Monte ou Coinche<br><span class="muted small">Interdit de passer, dès l'entame : on surenchérit ou on coinche. Seule une coinche arrête l'enchère.</span></span></button>
+    ${beloteToggle(o.belote !== false, 'optBelote')}</div>`;
+}
+function beloteToggle(on, action) {
+  return `<button class="moc opt ${on ? 'on' : ''}" data-a="${action}" aria-pressed="${on}"><span class="mbox" aria-hidden="true">${on ? '✓' : ''}</span>
+      <span><b>Belote / Rebelote</b><br><span class="muted small">Roi et dame d'atout dans la même main : +20 points. Décochez pour jouer sans.</span></span></button>`;
 }
 
 function rulesBlock() {
@@ -415,10 +420,11 @@ function rulesBlock() {
     <li>32 cartes, jeu dans le sens inverse des aiguilles d'une montre. Atout : J 20, 9 14, A 11, 10 10, K 4, Q 3. Hors atout : A 11, 10 10, K 4, Q 3, J 2. (J = valet, Q = dame, K = roi.)</li>
     <li>Enchères de 80 à 160 puis capot, à la couleur, sans atout (SA) ou tout atout (TA). Coinche par la défense, surcoinche par l'équipe preneuse.</li>
     <li>Fournir à la couleur demandée si on peut. Sinon, couper si l'adversaire est maître (en surcoupant si possible, sinon en sous-coupant).</li>
-    <li>Partenaire maître (à la couleur ou parce qu'il a coupé) : on fournit si on peut, sinon défausse libre ; pas d'obligation de couper, de surcouper ni de monter sur son partenaire.</li>
+    <li>Partenaire maître (à la couleur ou parce qu'il a coupé) : on fournit si on peut, sinon défausse libre ; pas d'obligation de couper ni de surcouper.</li>
+    <li>Atout demandé : on fournit et on monte si on peut, même quand son partenaire est maître.</li>
     <li>Sans atout (SA) : pas d'atout, on fournit, la plus forte de la couleur demandée gagne. As 19, 10 10, K 4, Q 3, J 2.</li>
-    <li>Tout atout (TA) : chaque couleur est atout ; on fournit et on monte dans la couleur demandée (sauf sur son partenaire). J 14, 9 9, A 6, 10 5, K 3, Q 1. Pas de belote en SA ni en TA.</li>
-    <li>Contrat réussi si les points faits (belote comprise) atteignent l'annonce et au moins 82. Réussi : annonce + points faits. Chute : 160 + annonce pour la défense. Coinche ×2, surcoinche ×4. Belote +20, dix de der +10, capot 250.</li>
+    <li>Tout atout (TA) : chaque couleur est atout ; on fournit et on monte dans la couleur demandée, même sur son partenaire. J 14, 9 9, A 6, 10 5, K 3, Q 1. Pas de belote en SA ni en TA.</li>
+    <li>Contrat réussi si les points faits (belote comprise) atteignent l'annonce et au moins 82. Réussi : annonce + points faits. Chute : 160 + annonce pour la défense. Coinche ×2, surcoinche ×4. Belote +20 (option, activée par défaut), dix de der +10, capot 250.</li>
     <li>Mode MOC (Monte ou Coinche, partie libre) : interdit de passer, dès l'entame. Chacun surenchérit ou coinche ; face à son partenaire, on surenchérit. Seule une coinche met fin aux enchères (surcoinche possible).</li>
     <li>Duplicate : chaque donne est comparée entre les tables. Points de match : 2 si mieux, 1 si égalité, 0 sinon, en pourcentage. Classements séparés Nord-Sud et Est-Ouest.</li>
   </ul></details>`;
@@ -434,6 +440,7 @@ function viewCreate() {
     <div class="field"><label>Donnes par série</label>
       <div class="stepper"><button data-a="step" data-k="perSet" data-d="-1" aria-label="Moins">−</button><output class="num">${f.perSet}</output><button data-a="step" data-k="perSet" data-d="1" aria-label="Plus">+</button></div>
       <p class="muted small">Règle le rythme : une table joue sa série, puis passe à la suivante sans attendre les autres.</p></div>
+    ${beloteToggle(f.belote !== false, 'tourBelote')}
     <div class="sheet pad stack small"><p><b>${f.tables} série${f.tables > 1 ? 's' : ''} de ${f.perSet} donnes</b>, soit <b>${f.tables * f.perSet} donnes</b> par table.</p>
       <p class="muted">Au tour 1, la table 1 joue la série A, la table 2 la série B… Chaque série passe ensuite à la table suivante.</p></div>
     <button class="btn primary block" data-a="createTour" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Création…' : 'Créer le tournoi'}</button>
@@ -485,7 +492,7 @@ function viewTour() {
   }).join('') : `<p class="muted small">Les donnes apparaîtront ici dès qu'une table aura joué.</p>`;
   return `<div class="wrap">${back('Tournois', '')}
     <div class="stack" style="gap:4px"><p class="eyebrow">Tournoi duplicate</p><h1>${esc(t.name)}</h1>
-      <p class="muted small">${t.tables} tables · séries de ${t.perSet} donnes · ${S.results.length} résultat${S.results.length > 1 ? 's' : ''}</p></div>
+      <p class="muted small">${t.tables} tables · séries de ${t.perSet} donnes${t.belote === false ? ' · sans belote' : ''} · ${S.results.length} résultat${S.results.length > 1 ? 's' : ''}</p></div>
     ${errBox()}
     ${shareBox(`Tournoi « ${t.name} » : choisis ta table`, 't=' + t.id)}
     <section class="section"><h2>Tables</h2><div class="sheet list">${tables}</div></section>
@@ -706,7 +713,7 @@ function viewLobby(d, title, backH) {
   return `<div class="wrap">${back('Retour', backH)}
     <div class="select-title"><p class="eyebrow">${c.kind === 'tour' ? 'Tournoi duplicate' : 'Partie libre'} · ${title}</p><h1>Sélection des joueurs</h1>
       ${d.kind === 'tour' && d.status !== 'finished' ? `<p class="muted small">Prochaine donne : série ${LETTER(E.setForTable(d.tour.tables, d.table, d.round))}, tour ${d.round + 1}</p>` : ''}
-      ${d.kind === 'free' ? `<p class="muted small">Partie en ${d.target}${d.moc ? ' · <b class="mocb">MOC</b> Monte ou Coinche' : ''}${d.n ? ` · NS ${d.scores[0]} · EO ${d.scores[1]}` : ''}</p>` : ''}</div>
+      ${d.kind === 'free' ? `<p class="muted small">Partie en ${d.target}${d.moc ? ' · <b class="mocb">MOC</b> Monte ou Coinche' : ''}${d.belote === false ? ' · sans belote' : ''}${d.n ? ` · NS ${d.scores[0]} · EO ${d.scores[1]}` : ''}</p>` : ''}</div>
     ${errBox()}
     ${needName ? nameField('lobbyName') : ''}
     ${c.kind === 'free' && !c.local ? shareBox(`Viens jouer à la coinche, table ${d.code} :`, 'r=' + d.code) : ''}
@@ -766,7 +773,7 @@ function viewGame(d, title, backH) {
     }).join('')}</div>`;
   }
   const ctx = d.kind === 'free' ? `${title} · donne ${d.n}` : `${title} · série ${LETTER(Math.floor(g.idx / d.tour.perSet))} · donne ${g.idx + 1}`;
-  return `<div class="game">
+  return `<div class="game${g.phase === 'done' ? ' done' : ''}">
     ${hud(d, g, backH)}
     <div class="hudsub"><span>${ctx}</span>${d.kind === 'free' ? `<span>${d.moc ? '<b class="mocb">MOC</b> ' : ''}NS ${d.scores[0]} · EO ${d.scores[1]} / ${d.target}</span>` : ''}</div>
     ${S.err ? `<div class="gerr">${errBox()}</div>` : ''}
@@ -783,6 +790,7 @@ function hud(d, g, backH) {
   const pts = [0, 0];
   for (const t of g.tricks) for (const x of t.cards) pts[E.team(t.winner)] += E.points(x.card, g.contract ? g.contract.suit : null);
   if (g.tricks.length === 8) pts[E.team(g.tricks[7].winner)] += 10;
+  if (g.beloteSaid >= 2) pts[E.team(g.beloteSeat)] += 20; // belote acquise une fois la rebelote jouée
   const att = g.contract ? E.team(g.contract.seat) : null;
   const side = tm => {
     const w = Math.min(100, pts[tm] / 162 * 100);
@@ -836,14 +844,16 @@ function resultPanel(d, g, mine) {
   else {
     const att = E.team(g.contract.seat);
     head = `<div class="res-head"><span class="verdict ${r.made ? 'ok' : 'bad'}">${r.made ? (r.tricks[att] === 8 ? 'Capot !' : 'Contrat réussi') : 'Dedans !'}</span><span class="small muted">${contractTxt(g.contract)} par ${esc(seatName(d, g.contract.seat))}</span></div>
-      <p class="small muted">Points faits : NS ${r.cardPts[0]}, EO ${r.cardPts[1]}${r.belote !== null ? ` · belote ${r.belote === 0 ? 'NS' : 'EO'}` : ''} · plis ${r.tricks[0]}–${r.tricks[1]}${r.tricks[att] === 8 ? ' · capot !' : ''}</p>`;
+      <p class="small muted">Points faits : NS ${r.cardPts[0]}, EO ${r.cardPts[1]}${r.belote !== null ? ` · belote ${r.belote === 0 ? 'NS' : 'EO'}` : ''} · plis ${r.tricks[0]}–${r.tricks[1]}</p>`;
   }
-  const line = `<div class="scoreline"><div><p class="eyebrow">Nord-Sud</p><p class="big">${r.ns}</p><p class="small muted">${esc(T.names(d, 0))}</p></div>
-    <div><p class="eyebrow">Est-Ouest</p><p class="big">${r.ew}</p><p class="small muted">${esc(T.names(d, 1))}</p></div></div>`;
+  const free = d.kind === 'free';
+  const cell = tm => `<div><p class="eyebrow">${tm === 0 ? 'Nord-Sud' : 'Est-Ouest'}</p><p class="big">${tm === 0 ? r.ns : r.ew}</p>
+    <p class="small muted">${free ? `Total <b class="num">${d.scores[tm]}</b>` : esc(T.names(d, tm))}</p></div>`;
+  const line = `<div class="scoreline">${cell(0)}${cell(1)}</div>`;
   let extra = '', nextLbl = 'Donne suivante';
-  if (d.kind === 'free') {
+  if (free) {
     const won = Math.max(...d.scores) >= d.target;
-    extra = `<p class="small">Total : NS <b class="num">${d.scores[0]}</b> · EO <b class="num">${d.scores[1]}</b>${won ? ` · <b>${d.scores[0] >= d.scores[1] ? 'Nord-Sud' : 'Est-Ouest'} gagne la partie</b>` : ''}</p>`;
+    if (won) extra = `<p class="small"><b>${d.scores[0] >= d.scores[1] ? 'Nord-Sud' : 'Est-Ouest'} gagne la partie</b> (${d.scores[0]} – ${d.scores[1]})</p>`;
     if (won) nextLbl = 'Nouvelle partie';
   } else {
     const others = S.results.filter(x => x.deal === g.idx && x.table !== d.table);
@@ -860,9 +870,13 @@ function resultPanel(d, g, mine) {
   const all = T.dealHands(g);
   const hands = S.showHands && all ? `<div class="hands4">${[2, 3, 1, 0].map(s => `<div class="h"><span>${E.SEAT_NAME[E.SEATS[s]]}</span><span class="cs">${E.sortHand(all[s], g.contract && g.contract.suit).map(x => cardHTML(x, 'sm')).join('')}</span></div>`).join('')}</div>` : '';
   const canNext = mine.length && !busy();
-  return `${head}${line}${extra}${all ? `<button class="btn ghost" data-a="toggleHands">${S.showHands ? 'Masquer les quatre jeux' : 'Voir les quatre jeux'}</button>` : ''}${hands}
+  const links = [
+    all ? `<button class="lnk" data-a="toggleHands">${S.showHands ? 'Masquer les jeux' : 'Voir les quatre jeux'}</button>` : '',
+    mine.length ? `<button class="lnk" data-a="go" data-h="${d.kind === 'tour' ? `t=${S.tourId}&n=${d.table}&lobby=1` : (S.cur.local ? 'local&lobby=1' : 'r=' + d.code + '&lobby=1')}">Changer les sièges</button>` : '',
+  ].filter(Boolean).join('');
+  return `${head}${line}${extra}${hands}
     ${canNext ? `<button class="btn primary block" data-a="next">${nextLbl}</button>` : `<p class="small muted">Un joueur assis lance la donne suivante.</p>`}
-    ${mine.length ? `<button class="lnk" data-a="go" data-h="${d.kind === 'tour' ? `t=${S.tourId}&n=${d.table}&lobby=1` : (S.cur.local ? 'local&lobby=1' : 'r=' + d.code + '&lobby=1')}">Changer les sièges</button>` : ''}`;
+    ${links ? `<div class="reslinks">${links}</div>` : ''}`;
 }
 
 /* ---------- Rendu global (préserve la saisie en cours) ---------- */
@@ -904,6 +918,8 @@ $app.addEventListener('click', async e => {
     case 'optTarget': S.freeOpts = { ...S.freeOpts, target: +d.v }; LS.set('sc_free', S.freeOpts); render(); break;
     case 'colors4': S.colors4 = d.v === '1'; LS.set('sc_colors4', S.colors4); document.body.classList.toggle('c4', S.colors4); render(); break;
     case 'optMoc': S.freeOpts = { ...S.freeOpts, moc: !S.freeOpts.moc }; LS.set('sc_free', S.freeOpts); render(); break;
+    case 'optBelote': S.freeOpts = { ...S.freeOpts, belote: S.freeOpts.belote === false }; LS.set('sc_free', S.freeOpts); render(); break;
+    case 'tourBelote': S.form = { ...S.form, belote: S.form.belote === false }; render(); break;
     case 'joinCode': { const c = S.code.trim().toUpperCase(); if (c.length === 4) go('r=' + c); else { S.err = 'Le code de table compte 4 lettres.'; render(); } break; }
     case 'step': { const lim = d.k === 'tables' ? [1, 12] : [1, 16]; S.form[d.k] = Math.min(lim[1], Math.max(lim[0], S.form[d.k] + +d.d)); render(); break; }
     case 'createTour': createTournament(); break;

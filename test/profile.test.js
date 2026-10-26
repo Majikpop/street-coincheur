@@ -125,3 +125,15 @@ test('code de profil : format et normalisation', () => {
   assert.equal(P.normKey(' abcd efgh '), 'ABCD-EFGH');
   assert.equal(P.normKey(k.toLowerCase().replace('-', '')), k);
 });
+
+test('option belote : choisie à la création de la table ou du tournoi, transmise à chaque donne', () => {
+  assert.equal(T.initFree('ABCD', {}).belote, true);
+  const d = T.initFree('ABCD', { belote: false });
+  d.seats = d.seats.map((x, i) => ({ uid: null, name: 'IA ' + i, bot: true }));
+  d.seats[0] = { uid: 'u', name: 'A', bot: false };
+  const r = T.apply(d, { type: 'start' }, 'u');
+  assert.equal(JSON.parse(r.doc.game).noBelote, true);
+  const t = T.initTour({ id: 't1', name: 'X', tables: 1, perSet: 2, belote: false }, 0);
+  assert.equal(t.tour.belote, false);
+  assert.equal(T.initTour({ id: 't1', name: 'X', tables: 1, perSet: 2 }, 0).tour.belote, undefined);
+});
