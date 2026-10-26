@@ -127,7 +127,7 @@ window.SC_POSTER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 420
   <g stroke="#07060f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
     <g transform="translate(296 262) rotate(14)">
       <rect x="-19" y="-58" width="38" height="54" rx="4" fill="#fffdf6"/>
-      <text x="-14" y="-38" font-family="Bungee, 'DejaVu Sans', 'Arial Black', sans-serif" font-size="15" fill="#c8202b" stroke="none">V♥</text>
+      <text x="-14" y="-38" font-family="Bungee, 'DejaVu Sans', 'Arial Black', sans-serif" font-size="15" fill="#c8202b" stroke="none">J♥</text>
       <text x="0" y="-14" text-anchor="middle" font-family="'Atkinson Hyperlegible', 'DejaVu Sans', Arial, sans-serif" font-size="20" fill="#c8202b" stroke="none">♥</text>
     </g>
     <path d="M280 268 L 300 252 C 306 248, 312 252, 308 258 L 300 268 C 312 266, 318 274, 310 282 L 292 298 C 280 306, 266 300, 266 288 Z" fill="#e6b597"/>
@@ -168,7 +168,7 @@ window.SC_POSTER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 420
     <g transform="translate(352 300)">
       <g transform="rotate(-28)"><rect x="-17" y="-62" width="34" height="48" rx="4" fill="#fffdf6"/><text x="-13" y="-46" fill="#17171c" stroke="none">A♠</text></g>
       <g transform="rotate(-9)"><rect x="-17" y="-64" width="34" height="48" rx="4" fill="#fffdf6"/><text x="-13" y="-48" fill="#c8202b" stroke="none">10♦</text></g>
-      <g transform="rotate(10)"><rect x="-17" y="-64" width="34" height="48" rx="4" fill="#fffdf6"/><text x="-13" y="-48" fill="#17171c" stroke="none">R♣</text></g>
+      <g transform="rotate(10)"><rect x="-17" y="-64" width="34" height="48" rx="4" fill="#fffdf6"/><text x="-13" y="-48" fill="#17171c" stroke="none">K♣</text></g>
     </g>
     <path d="M378 330 C 378 304, 366 292, 350 292 C 332 292, 326 308, 332 320 C 338 334, 364 342, 378 330 Z" fill="#d39a6c"/>
     <path d="M362 300 L 362 314 M 350 298 L 350 314 M 340 300 L 340 314" stroke-width="2" fill="none"/>
