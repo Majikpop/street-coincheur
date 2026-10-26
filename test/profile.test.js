@@ -151,3 +151,23 @@ test('coinche à la volée à la table', () => {
   d = T.apply(d, { type: 'bid', seat: 0, bid: { type: 'coinche' }, on, hands }, 'u').doc; // Sud coinche alors que c'est à Nord
   assert.equal(T.getGame(d, hands).contract.coinche, 2);
 });
+
+test('admin : code normalisé, doublons probables, profil à garder, codes orphelins', () => {
+  assert.equal(P.normAdmin(' abcd efgh-ijkl mnop '), 'ABCD-EFGH-IJKL-MNOP');
+  assert.equal(P.nameKey('Léa B.'), P.nameKey('lea b'));
+  const players = [
+    { id: 'p1', name: 'Léa', updatedAt: 10, summary: { deals: 0 } },
+    { id: 'p2', name: 'LEA', updatedAt: 5, summary: { deals: 3 } },
+    { id: 'p3', name: 'Max', updatedAt: 1, summary: { deals: 9 } },
+    { id: 'p4', name: 'lea ', updatedAt: 20 },
+  ];
+  const keys = [{ id: 'AAAA-BBBB', pid: 'p2' }, { id: 'CCCC-DDDD', pid: 'p3' }, { id: 'EEEE-FFFF', pid: 'gone' }];
+  const a = P.adminRows(players, keys, { p1: 40 }); // fiches comptées pour p1 : priment sur le résumé publié
+  assert.equal(a.dupGroups, 1);
+  assert.deepEqual(a.orphans, ['EEEE-FFFF']);
+  assert.deepEqual(a.rows.map(r => r.id), ['p1', 'p2', 'p4', 'p3']); // doublons d'abord, le plus fourni en tête
+  assert.deepEqual(a.rows.map(r => r.keep), [true, false, false, false]);
+  assert.deepEqual(a.rows.map(r => r.dups), [2, 2, 2, 0]);
+  assert.deepEqual(a.rows.find(r => r.id === 'p2').codes, ['AAAA-BBBB']);
+  assert.equal(a.rows.find(r => r.id === 'p4').deals, 0);
+});

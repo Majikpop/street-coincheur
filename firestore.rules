@@ -2,6 +2,8 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
+    // Admin : téléphone (uid) qui a saisi un code admin valide, voir /admins.
+    function isAdmin() { return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); }
     function seated(t) { return request.auth.uid in [t.seats[0].uid, t.seats[1].uid, t.seats[2].uid, t.seats[3].uid]; }
     // Main <donne>-<siège> : lisible pendant la donne en cours par le joueur de ce siège,
     // ou par un joueur assis s'il s'agit d'un siège IA (les téléphones des joueurs font jouer l'IA).
@@ -21,13 +23,31 @@ service cloud.firestore {
     }
 
     // Profils joueurs : stats publiques (hall of fame) ; fiches de donne écrites en fin de donne par la table.
+    // Suppression (doublons) réservée à l'admin.
     match /players/{pid} {
-      allow read, write: if signedIn();
-      match /deals/{k} { allow read, write: if signedIn(); }
+      allow read, create, update: if signedIn();
+      allow delete: if isAdmin();
+      match /deals/{k} {
+        allow read, create, update: if signedIn();
+        allow delete: if isAdmin();
+      }
     }
     // Code de récupération -> profil : lisible seulement si on connaît le code (pas de liste), jamais modifié.
+    // L'admin les liste (codes à redonner, codes orphelins) et les supprime avec les doublons.
     match /profileKeys/{k} {
       allow get, create: if signedIn();
+      allow list, delete: if isAdmin();
+    }
+
+    // Codes admin : un document par code, créé à la main dans la console Firebase. Illisibles depuis l'appli.
+    match /adminKeys/{k} {
+      allow read, write: if false;
+    }
+    // Un téléphone devient admin en créant admins/<son uid> avec un code qui existe dans adminKeys.
+    match /admins/{uid} {
+      allow get, delete: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid && request.resource.data.key is string
+        && exists(/databases/$(database)/documents/adminKeys/$(request.resource.data.key));
     }
 
     match /tournaments/{tid} {
