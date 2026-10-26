@@ -1,7 +1,7 @@
 /* Affiche « Nord-Sud contre Est-Ouest » (création originale), écran de sélection 2 contre 2,
    insérée dans la page pour profiter des polices chargées.
    Les bustes sont dessinés tournés vers la droite ; l'équipe Est-Ouest est retournée en miroir. */
-window.SC_POSTER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 420" role="img" aria-label="Street Coincheur : Nord-Sud contre Est-Ouest, Dédé et Lulu en rouge face à Josie et le Prof en bleu">
+window.SC_POSTER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 420" role="img" aria-label="Street Coincheur : Nord-Sud contre Est-Ouest, Dedz et Lady V en rouge face à J0Z et Kapot en bleu">
   <defs>
     <radialGradient id="sc-glowR" cx="0%" cy="45%" r="80%"><stop offset="0" stop-color="#b3122c"/><stop offset=".55" stop-color="#4a0816"/><stop offset="1" stop-color="#0a0c1e" stop-opacity="0"/></radialGradient>
     <radialGradient id="sc-glowB" cx="100%" cy="45%" r="80%"><stop offset="0" stop-color="#1253b8"/><stop offset=".55" stop-color="#0a2156"/><stop offset="1" stop-color="#0a0c1e" stop-opacity="0"/></radialGradient>
@@ -30,8 +30,8 @@ window.SC_POSTER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 420
     <path d="M326 210 L 660 60 M 326 210 L 660 150 M 326 210 L 660 300 M 326 210 L 590 -20" stroke="#5aa8ff"/>
   </g>
 
-  <!-- ===== Arrière-plan : Dédé (Nord) et le Prof (Ouest) ===== -->
-  <!-- DÉDÉ : gapette, moustache, blouson de cuir sur marinière -->
+  <!-- ===== Arrière-plan : Dedz (Nord) et Kapot (Ouest) ===== -->
+  <!-- DEDZ : gapette, moustache, blouson de cuir sur marinière -->
   <g transform="translate(96 156) scale(.8)" stroke="#07060f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
     <path d="M-128 300 C -126 180, -96 112, -40 96 L 44 96 C 98 112, 128 180, 130 300 Z" fill="url(#sc-redleather)"/>
     <path d="M-30 98 L 34 98 L 22 300 L -18 300 Z" fill="url(#sc-stripes)"/>
@@ -58,7 +58,7 @@ window.SC_POSTER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 420
     <path d="M18 41 L 42 34" stroke="#e8c690" stroke-width="2.5"/>
   </g>
 
-  <!-- LE PROF : crâne rasé, barbe poivre et sel, lunettes rondes (retourné en miroir) -->
+  <!-- KAPOT : crâne rasé, barbe poivre et sel, lunettes rondes (retourné en miroir) -->
   <g transform="translate(544 156) scale(-.8 .8)" stroke="#07060f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
     <path d="M-128 300 C -126 180, -96 112, -40 96 L 44 96 C 98 112, 128 180, 130 300 Z" fill="url(#sc-blueblazer)"/>
     <path d="M-34 90 C -16 82, 22 82, 38 90 L 34 300 L -30 300 Z" fill="#0d1430"/>
@@ -89,8 +89,8 @@ window.SC_POSTER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 420
   <!-- fondu des personnages du fond -->
   <rect x="0" y="230" width="640" height="190" fill="url(#sc-fadeL)"/>
 
-  <!-- ===== Premier plan : Lulu (Sud) et Josie (Est) ===== -->
-  <!-- LULU : chignon tiré, trench rouge col relevé, regard froid -->
+  <!-- ===== Premier plan : Lady V (Sud) et J0Z (Est) ===== -->
+  <!-- LADY V : chignon tiré, trench rouge col relevé, regard froid -->
   <g transform="translate(212 196)" stroke="#07060f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
     <path d="M-126 240 C -124 160, -96 112, -44 96 L 44 96 C 96 112, 124 160, 126 240 Z" fill="url(#sc-redcoat)"/>
     <path d="M-30 74 C -18 66, 20 66, 30 74 L 30 240 L -30 240 Z" fill="#14080c"/>
@@ -123,7 +123,7 @@ window.SC_POSTER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 420
     <path d="M-4 34 C 4 31, 14 31, 22 33 C 16 39, 4 40, -4 34 Z" fill="#8e0f22" stroke-width="2"/>
     <circle cx="-42" cy="18" r="10" fill="none" stroke="#e8b23a" stroke-width="3"/>
   </g>
-  <!-- main de Lulu : une carte tenue entre deux doigts -->
+  <!-- main de Lady V : une carte tenue entre deux doigts -->
   <g stroke="#07060f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
     <g transform="translate(296 262) rotate(14)">
       <rect x="-19" y="-58" width="38" height="54" rx="4" fill="#fffdf6"/>
@@ -134,7 +134,7 @@ window.SC_POSTER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 420
     <path d="M262 286 L 290 296 L 280 330 L 248 318 Z" fill="#8c0f24"/>
   </g>
 
-  <!-- JOSIE : carré asymétrique, lunettes miroir, perfecto bleu (retournée en miroir) -->
+  <!-- J0Z : carré asymétrique, lunettes miroir, perfecto bleu (retournée en miroir) -->
   <g transform="translate(428 196) scale(-1 1)" stroke="#07060f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
     <path d="M-126 240 C -124 160, -96 112, -44 96 L 44 96 C 96 112, 124 160, 126 240 Z" fill="url(#sc-bluecoat)"/>
     <path d="M-28 100 L 30 100 L 22 240 L -20 240 Z" fill="#eef0f8"/>
@@ -163,7 +163,7 @@ window.SC_POSTER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 420
     <path d="M24 32 L 30 28" stroke-width="2.5"/>
     <circle cx="-44" cy="24" r="8" fill="none" stroke="#c8d2e8" stroke-width="3"/>
   </g>
-  <!-- main de Josie : éventail ouvert -->
+  <!-- main de J0Z : éventail ouvert -->
   <g stroke="#07060f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" font-family="Bungee, 'DejaVu Sans', 'Arial Black', sans-serif" font-size="13">
     <g transform="translate(352 300)">
       <g transform="rotate(-28)"><rect x="-17" y="-62" width="34" height="48" rx="4" fill="#fffdf6"/><text x="-13" y="-46" fill="#17171c" stroke="none">A♠</text></g>
@@ -189,10 +189,10 @@ window.SC_POSTER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 420
     <text x="16" y="33" font-size="12" fill="#ffffff">NORD-SUD</text>
     <text x="624" y="33" font-size="12" fill="#ffffff" text-anchor="end">EST-OUEST</text>
     <g font-size="10" stroke="#07060f" stroke-width="4" paint-order="stroke">
-      <text x="30" y="84" fill="#ffb3bd">N·DÉDÉ</text>
-      <text x="182" y="106" fill="#ffb3bd">S·LULU</text>
-      <text x="610" y="84" text-anchor="end" fill="#b3d4ff">O·LE PROF</text>
-      <text x="458" y="106" text-anchor="end" fill="#b3d4ff">E·JOSIE</text>
+      <text x="30" y="84" fill="#ffb3bd">N·DEDZ</text>
+      <text x="182" y="106" fill="#ffb3bd">S·LADY V</text>
+      <text x="610" y="84" text-anchor="end" fill="#b3d4ff">O·KAPOT</text>
+      <text x="458" y="106" text-anchor="end" fill="#b3d4ff">E·J0Z</text>
     </g>
   </g>
 
