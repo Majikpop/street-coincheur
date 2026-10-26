@@ -190,7 +190,7 @@ async function createRoom() {
 }
 async function createTournament() {
   const f = S.form, id = 't' + Date.now().toString(36) + rnd().slice(0, 4);
-  const tour = { id, name: f.name.trim() || 'Tournoi du ' + new Date().toLocaleDateString('fr-FR'), tables: f.tables, perSet: f.perSet, ...(f.belote === false ? { belote: false } : {}), owner: NET.uid, createdAt: Date.now() };
+  const tour = { id, name: f.name.trim() || 'Tournoi du ' + new Date().toLocaleDateString('fr-FR'), tables: f.tables, perSet: f.perSet, ...(f.belote === false ? { belote: false } : {}), speed: SPEEDS[f.speed] ? f.speed : 'normal', owner: NET.uid, createdAt: Date.now() };
   S.busy = true; render();
   try { await NET.set('tournaments/' + id, tour); await NET.setMany(T.tourHands(tour, rnd() + rnd())); S.busy = false; go('t=' + id); }
   catch (e) { S.busy = false; S.err = 'Création impossible (' + (e.code || e.message) + ').'; render(); }
@@ -295,6 +295,9 @@ function onDoc() {
   }
   scheduleBot();
 }
+/* Vitesse de l'IA, choisie à la création : délai avant une annonce et avant une carte (ms). */
+const SPEEDS = { fast: { label: 'Rapide', bid: 700, card: 600 }, normal: { label: 'Normale', bid: 1500, card: 900 }, slow: { label: 'Posée', bid: 2500, card: 1300 } };
+const speedOf = d => SPEEDS[(d.kind === 'tour' ? d.tour.speed : d.speed)] || SPEEDS.normal;
 function scheduleBot() {
   clearTimeout(botTimer);
   const d = S.doc; if (!d || d.status !== 'playing') return;
@@ -308,7 +311,7 @@ function scheduleBot() {
     return;
   }
   const rank = d.seats.filter(s => !s.bot && s.uid).findIndex(s => s.uid === uid());
-  const wait = Math.max(0, S.pauseUntil - Date.now()) + (g.phase === 'bid' ? 700 : 600) + Math.max(0, rank) * 350;
+  const wait = Math.max(0, S.pauseUntil - Date.now()) + speedOf(d)[g.phase === 'bid' ? 'bid' : 'card'] + Math.max(0, rank) * 350;
   const rev = d.rev, seat = g.turn;
   botTimer = setTimeout(() => { if (S.doc && S.doc.rev === rev) S.cur.net.act(S.cur.path, S.cur.init, { type: 'botmove', seat, rev, hands: myHands() }).catch(() => {}); }, wait);
 }
@@ -408,7 +411,14 @@ function freeOptions() {
   return `<div class="opts"><div class="field"><label>Partie en</label><div class="chips">${chips}</div></div>
     <button class="moc ${o.moc ? 'on' : ''}" data-a="optMoc" aria-pressed="${o.moc}"><span class="mbox" aria-hidden="true">${o.moc ? '✓' : ''}</span>
       <span><b>Mode MOC</b> · Monte ou Coinche<br><span class="muted small">Interdit de passer, dès l'entame : on surenchérit ou on coinche. Seule une coinche arrête l'enchère.</span></span></button>
-    ${beloteToggle(o.belote !== false, 'optBelote')}</div>`;
+    ${beloteToggle(o.belote !== false, 'optBelote')}
+    ${speedChips(o.speed, 'optSpeed')}</div>`;
+}
+function speedChips(cur, action) {
+  cur = SPEEDS[cur] ? cur : 'normal';
+  return `<div class="field"><label>Vitesse de l'IA</label><div class="chips">${Object.entries(SPEEDS).map(([k, v]) =>
+    `<button class="chip ${cur === k ? 'on' : ''}" data-a="${action}" data-v="${k}" aria-pressed="${cur === k}">${v.label}</button>`).join('')}</div>
+    <p class="muted small">Le temps de suivre les annonces de l'IA et de coincher à la volée.</p></div>`;
 }
 function beloteToggle(on, action) {
   return `<button class="moc opt ${on ? 'on' : ''}" data-a="${action}" aria-pressed="${on}"><span class="mbox" aria-hidden="true">${on ? '✓' : ''}</span>
@@ -418,7 +428,7 @@ function beloteToggle(on, action) {
 function rulesBlock() {
   return `<details class="sheet rules"><summary>Règles et barème</summary><ul>
     <li>32 cartes, jeu dans le sens inverse des aiguilles d'une montre. Atout : J 20, 9 14, A 11, 10 10, K 4, Q 3. Hors atout : A 11, 10 10, K 4, Q 3, J 2. (J = valet, Q = dame, K = roi.)</li>
-    <li>Enchères de 80 à 160 puis capot, à la couleur, sans atout (SA) ou tout atout (TA). Coinche par la défense, surcoinche par l'équipe preneuse.</li>
+    <li>Enchères de 80 à 160 puis capot, à la couleur, sans atout (SA) ou tout atout (TA). Coinche par la défense, à tout moment des enchères, même hors de son tour (sauf en MOC) ; surcoinche par l'équipe preneuse.</li>
     <li>Fournir à la couleur demandée si on peut. Sinon, couper si l'adversaire est maître (en surcoupant si possible, sinon en sous-coupant).</li>
     <li>Partenaire maître (à la couleur ou parce qu'il a coupé) : on fournit si on peut, sinon défausse libre ; pas d'obligation de couper ni de surcouper.</li>
     <li>Atout demandé : on fournit et on monte si on peut, même quand son partenaire est maître.</li>
@@ -441,6 +451,7 @@ function viewCreate() {
       <div class="stepper"><button data-a="step" data-k="perSet" data-d="-1" aria-label="Moins">−</button><output class="num">${f.perSet}</output><button data-a="step" data-k="perSet" data-d="1" aria-label="Plus">+</button></div>
       <p class="muted small">Règle le rythme : une table joue sa série, puis passe à la suivante sans attendre les autres.</p></div>
     ${beloteToggle(f.belote !== false, 'tourBelote')}
+    ${speedChips(f.speed, 'tourSpeed')}
     <div class="sheet pad stack small"><p><b>${f.tables} série${f.tables > 1 ? 's' : ''} de ${f.perSet} donnes</b>, soit <b>${f.tables * f.perSet} donnes</b> par table.</p>
       <p class="muted">Au tour 1, la table 1 joue la série A, la table 2 la série B… Chaque série passe ensuite à la table suivante.</p></div>
     <button class="btn primary block" data-a="createTour" ${S.busy ? 'disabled' : ''}>${S.busy ? 'Création…' : 'Créer le tournoi'}</button>
@@ -807,7 +818,12 @@ function panel(d, g, v, mine, paused, cover) {
   const myTurn = g.turn === v && mine.includes(v) && !cover;
   const waitTxt = d.seats[g.turn].bot ? `${turnName} réfléchit…` : `À ${turnName}`;
   if (g.phase === 'bid') {
-    if (!myTurn) return `<p class="status">${waitTxt}${d.seats[g.turn].bot ? '' : " d'annoncer"}</p>${bidHistory(d, g)}`;
+    if (!myTurn) {
+      const fly = cover ? null : mine.find(s => E.canCoinche(g, s));
+      return `<p class="status">${waitTxt}${d.seats[g.turn].bot ? '' : " d'annoncer"}</p>
+        ${fly !== undefined && fly !== null ? `<p class="small muted">Actuel : ${contractTxt(g.contract)} (${esc(seatName(d, g.contract.seat))})</p>
+        <button class="btn gold block" data-a="flyCoinche" data-s="${fly}" ${busy() ? 'disabled' : ''}>Coincher !</button>` : ''}${bidHistory(d, g)}`;
+    }
     const o = E.legalBidOptions(g, v), dis = busy() ? 'disabled' : '';
     if (g.surQueue) return `<p class="status">Votre contrat est coinché : surcoincher ?</p>
       <div class="acts"><button class="btn" data-a="bid" data-t="pass" ${dis}>Passer</button><button class="btn gold" data-a="bid" data-t="surcoinche" ${dis}>Surcoincher</button></div>`;
@@ -919,6 +935,8 @@ $app.addEventListener('click', async e => {
     case 'colors4': S.colors4 = d.v === '1'; LS.set('sc_colors4', S.colors4); document.body.classList.toggle('c4', S.colors4); render(); break;
     case 'optMoc': S.freeOpts = { ...S.freeOpts, moc: !S.freeOpts.moc }; LS.set('sc_free', S.freeOpts); render(); break;
     case 'optBelote': S.freeOpts = { ...S.freeOpts, belote: S.freeOpts.belote === false }; LS.set('sc_free', S.freeOpts); render(); break;
+    case 'optSpeed': S.freeOpts = { ...S.freeOpts, speed: d.v }; LS.set('sc_free', S.freeOpts); render(); break;
+    case 'tourSpeed': S.form = { ...S.form, speed: d.v }; render(); break;
     case 'tourBelote': S.form = { ...S.form, belote: S.form.belote === false }; render(); break;
     case 'joinCode': { const c = S.code.trim().toUpperCase(); if (c.length === 4) go('r=' + c); else { S.err = 'Le code de table compte 4 lettres.'; render(); } break; }
     case 'step': { const lim = d.k === 'tables' ? [1, 12] : [1, 16]; S.form[d.k] = Math.min(lim[1], Math.max(lim[0], S.form[d.k] + +d.d)); render(); break; }
@@ -953,6 +971,7 @@ $app.addEventListener('click', async e => {
       break;
     }
     case 'play': { const g = game(S.doc); const [r, s] = [d.c.slice(0, -1), d.c.slice(-1)]; act({ type: 'card', seat: g.turn, card: { r, s } }); break; }
+    case 'flyCoinche': { const g = game(S.doc); if (!g.contract) return; const { value, suit, seat } = g.contract; act({ type: 'bid', seat: +d.s, bid: { type: 'coinche' }, on: { value, suit, seat } }); break; }
     case 'toggleHands': S.showHands = !S.showHands; render(); break;
     case 'lastPli': S.showLast = !S.showLast; render(); break;
   }

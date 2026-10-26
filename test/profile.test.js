@@ -137,3 +137,17 @@ test('option belote : choisie à la création de la table ou du tournoi, transmi
   assert.equal(t.tour.belote, false);
   assert.equal(T.initTour({ id: 't1', name: 'X', tables: 1, perSet: 2 }, 0).tour.belote, undefined);
 });
+
+test('coinche à la volée à la table', () => {
+  let d = T.initFree('ABCD', {});
+  d.seats = [{ uid: 'u', name: 'A', bot: false }, { uid: 'v', name: 'B', bot: false }, { uid: 'w', name: 'C', bot: false }, { uid: 'x', name: 'D', bot: false }];
+  let r = T.apply(d, { type: 'start' }, 'u'); d = r.doc;
+  const hands = [0, 1, 2, 3].map(s => r.writes.find(w => w.path === T.handPath('rooms/ABCD', 0, s)).data.cards);
+  d = T.apply(d, { type: 'bid', seat: 1, bid: { type: 'bid', value: 80, suit: 'S' }, hands }, 'v').doc;
+  assert.equal(d.speed, 'normal');
+  const on = { value: 80, suit: 'S', seat: 1 };
+  assert.throws(() => T.apply(d, { type: 'bid', seat: 0, bid: { type: 'coinche' }, on: { ...on, value: 90 }, hands }, 'u'), /contrat a changé/);
+  assert.throws(() => T.apply(d, { type: 'bid', seat: 3, bid: { type: 'coinche' }, on, hands }, 'x'), /plus ce tour/); // partenaire du preneur
+  d = T.apply(d, { type: 'bid', seat: 0, bid: { type: 'coinche' }, on, hands }, 'u').doc; // Sud coinche alors que c'est à Nord
+  assert.equal(T.getGame(d, hands).contract.coinche, 2);
+});

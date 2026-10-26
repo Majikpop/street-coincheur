@@ -12,14 +12,14 @@ const T = (() => {
   function initTour(tour, table) {
     return {
       kind: 'tour', tid: tour.id, table,
-      tour: { id: tour.id, name: tour.name, tables: tour.tables, perSet: tour.perSet, ...(tour.belote === false ? { belote: false } : {}), ...(tour.seed ? { seed: tour.seed } : {}) },
+      tour: { id: tour.id, name: tour.name, tables: tour.tables, perSet: tour.perSet, ...(tour.belote === false ? { belote: false } : {}), ...(tour.speed ? { speed: tour.speed } : {}), ...(tour.seed ? { seed: tour.seed } : {}) },
       seats: [EMPTY(), EMPTY(), EMPTY(), EMPTY()],
       round: 0, doneDeals: [], status: 'lobby', game: null, rev: 0, at: 0,
     };
   }
   function initFree(code, opts = {}) {
     return {
-      kind: 'free', code, n: 0, scores: [0, 0], target: opts.target || 1000, moc: !!opts.moc, belote: opts.belote !== false,
+      kind: 'free', code, n: 0, scores: [0, 0], target: opts.target || 1000, moc: !!opts.moc, belote: opts.belote !== false, speed: opts.speed || 'normal',
       seats: [EMPTY(), EMPTY(), EMPTY(), EMPTY()],
       status: 'lobby', game: null, rev: 0, at: 0,
     };
@@ -164,8 +164,10 @@ const T = (() => {
       case 'bid': case 'card': case 'botmove': {
         if (d.status !== 'playing') refuse('Pas de donne en cours');
         const g = getGame(d, a.hands);
-        if (g.turn !== seat || g.phase === 'done') refuse('Ce n\'est plus ce tour');
+        const flying = a.type === 'bid' && a.bid && a.bid.type === 'coinche' && g.turn !== seat;
+        if ((g.turn !== seat && !(flying && E.canCoinche(g, seat))) || g.phase === 'done') refuse('Ce n\'est plus ce tour');
         if (a.rev !== undefined && a.rev !== doc.rev) refuse('Coup périmé');
+        if (flying && a.on && !(g.contract && ['value', 'suit', 'seat'].every(k => g.contract[k] === a.on[k]))) refuse('Le contrat a changé : coinche annulée');
         if (a.type !== 'bid' && !g.hands[seat]) refuse('Main pas encore reçue');
         if (a.type === 'botmove') {
           if (!d.seats[seat].bot) refuse('Pas un siège IA');

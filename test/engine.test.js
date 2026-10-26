@@ -540,3 +540,21 @@ test('duplicate de bout en bout : deux tables d\'IA, classement complémentaire'
   for (const deal of Object.values(mp)) for (const m of Object.values(deal)) { assert.equal(m.nsPct, 50); assert.equal(m.diff, 0); }
   E.standings(results, tables).forEach(l => { assert.equal(l.pct, 50); assert.equal(l.compared, tables * perSet); });
 });
+
+test('coinche à la volée : un défenseur coinche hors de son tour, sauf en MOC', () => {
+  const deal = E.makeDeal('volee', 0); // donneur Sud : Est parle en premier
+  const g = E.newGame(deal);
+  E.applyBid(g, EST, { type: 'bid', value: 80, suit: 'H' });
+  assert.equal(g.turn, N);
+  assert.ok(E.canCoinche(g, S) && !E.canCoinche(g, O)); // Ouest est le partenaire du preneur
+  assert.throws(() => E.applyBid(g, O, { type: 'coinche' }), /Pas votre tour/);
+  E.applyBid(g, S, { type: 'coinche' }); // Sud coinche alors que c'est à Nord
+  assert.equal(g.contract.coinche, 2);
+  assert.equal(g.contract.coincheBy, S);
+  assert.equal(g.turn, EST); // l'équipe preneuse peut surcoincher, dans l'ordre de jeu après le coincheur
+  assert.ok(!E.canCoinche(g, N));
+  const m = E.newGame(deal, { moc: true });
+  E.applyBid(m, EST, { type: 'bid', value: 80, suit: 'H' });
+  assert.ok(!E.canCoinche(m, S) && E.canCoinche(m, N));
+  assert.throws(() => E.applyBid(m, S, { type: 'coinche' }), /Pas votre tour/);
+});
