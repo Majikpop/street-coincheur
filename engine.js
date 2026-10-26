@@ -101,9 +101,14 @@ const E = (() => {
     return o;
   }
 
+  // Coinche à la volée (hors MOC) : un défenseur coinche le contrat adverse à tout moment des enchères, même hors de son tour
+  const canCoinche = (g, seat) => g.phase === 'bid' && !g.surQueue && !!g.contract && g.contract.coinche === 1
+    && team(g.contract.seat) !== team(seat) && (g.turn === seat || !g.moc);
+
   function applyBid(g, seat, bid) {
-    if (g.phase !== 'bid' || g.turn !== seat) throw new Error('Pas votre tour');
-    const opts = legalBidOptions(g, seat);
+    const flying = g.turn !== seat && bid.type === 'coinche' && canCoinche(g, seat);
+    if (g.phase !== 'bid' || (g.turn !== seat && !flying)) throw new Error('Pas votre tour');
+    const opts = flying ? { coinche: true } : legalBidOptions(g, seat);
     g.bids.push({ seat, ...bid });
     if (g.surQueue) {
       if (bid.type === 'surcoinche') { g.contract.coinche = 4; return startPlay(g); }
@@ -397,7 +402,7 @@ const E = (() => {
 
   return {
     SUITS, CONTRACTS, SYM, SUIT_NAME, RANK_FR, SEATS, SEAT_NAME, BID_VALUES, team, partner, next,
-    hashStr, makeDeal, newGame, legalBidOptions, applyBid, legalCards, playCard, trickWinner, points, sortHand, sameCard,
+    hashStr, makeDeal, newGame, legalBidOptions, canCoinche, applyBid, legalCards, playCard, trickWinner, points, sortHand, sameCard,
     scoreDeal, botBid, botPlay, setForTable, dealsOfSet, matchpoints, standings,
   };
 })();
