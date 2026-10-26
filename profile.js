@@ -147,6 +147,35 @@ const P = (E => {
     }));
   }
 
-  return { newKey, normKey, dealRecords, tourRank, tourLines, stats, summary, titles, boards };
+  /** Code admin saisi : majuscules, groupes de 4 séparés par des tirets (XXXX-XXXX-XXXX-XXXX). */
+  const normAdmin = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/(.{4})(?=.)/g, '$1-');
+
+  /** Prénom comparable : sans casse, accents, espaces ni ponctuation (« Léa », « lea », « LÉA » sont le même). */
+  const nameKey = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  /** Liste admin des profils : doublons probables (même prénom), profil à garder, codes de récupération, codes orphelins.
+   * keys = documents profileKeys ({ id: code, pid }) ; counts = pid -> nombre de fiches de donne (sinon le résumé publié). */
+  function adminRows(players, keys, counts = {}) {
+    const ids = new Set(players.map(p => p.id)), codes = {}, orphans = [];
+    for (const k of keys) {
+      if (ids.has(k.pid)) (codes[k.pid] = codes[k.pid] || []).push(k.id);
+      else orphans.push(k.id);
+    }
+    const rows = players.map(p => ({
+      id: p.id, name: p.name || '', key: nameKey(p.name), createdAt: p.createdAt || 0, updatedAt: p.updatedAt || 0,
+      deals: counts[p.id] ?? (p.summary ? p.summary.deals : 0), codes: codes[p.id] || [], dups: 0, keep: false,
+    }));
+    const groups = {};
+    for (const r of rows) (groups[r.key] = groups[r.key] || []).push(r);
+    // à garder : le profil du groupe qui a le plus de donnes, puis le plus récemment utilisé
+    for (const g of Object.values(groups)) {
+      g.sort((a, b) => b.deals - a.deals || b.updatedAt - a.updatedAt);
+      g.forEach((r, i) => { r.dups = g.length - 1; r.keep = g.length > 1 && i === 0; });
+    }
+    rows.sort((a, b) => (b.dups > 0) - (a.dups > 0) || a.key.localeCompare(b.key) || b.deals - a.deals || b.updatedAt - a.updatedAt);
+    return { rows, orphans, dupGroups: Object.values(groups).filter(g => g.length > 1).length };
+  }
+
+  return { newKey, normKey, normAdmin, nameKey, adminRows, dealRecords, tourRank, tourLines, stats, summary, titles, boards };
 })(typeof E !== 'undefined' ? E : require('./engine.js'));
 if (typeof module !== 'undefined') module.exports = P;

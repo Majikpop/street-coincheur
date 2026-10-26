@@ -38,6 +38,7 @@ function makeLocal() {
     watchCol: (p, cb) => sub(p + '/*', cb),
     async get(p) { return data[p] ? clone(data[p]) : null; },
     async getCol(p) { return col(p); },
+    async count(p) { return col(p).length; },
     async set(p, v) { data[p] = clone(v); save(); },
     async setMany(ws) { for (const w of ws) data[w.path] = clone(w.data); save(); },
     async create(p, v) { if (data[p]) return false; data[p] = clone(v); save(); return true; },
@@ -71,6 +72,7 @@ async function makeOnline(cfg) {
     watchCol: (p, cb) => F.onSnapshot(F.collection(db, p), s => cb(s.docs.map(d => ({ ...d.data(), id: d.id }))), onErr),
     get: p => F.getDoc(F.doc(db, p)).then(s => (s.exists() ? s.data() : null)),
     getCol: p => F.getDocs(F.collection(db, p)).then(s => s.docs.map(d => ({ ...d.data(), id: d.id }))),
+    count: p => F.getCountFromServer(F.collection(db, p)).then(s => s.data().count),
     set: (p, v) => F.setDoc(F.doc(db, p), v),
     async setMany(ws) {
       for (let i = 0; i < ws.length; i += 400) {
@@ -122,6 +124,7 @@ const S = {
   hands: null, revealed: null, pending: false, confirm: null, showHands: false, showLast: false, bidSel: { value: null, suit: null },
   trickKey: null, trickSeen: 0, pauseUntil: 0,
   profile: LS.get('sc_profile', null), me: null, prof: null, hof: null, keyIn: '',
+  admin: null, adm: null, adminIn: '',
 };
 const subs = {};
 function unsub(k) { if (subs[k]) { subs[k](); delete subs[k]; } }
@@ -140,6 +143,8 @@ function route() {
   else if (h.has('new')) { S.form = { name: '', tables: 2, perSet: 8 }; S.view = 'create'; }
   else if (h.has('me') || h.has('p')) { S.view = 'profile'; openProfile(h.has('p') ? h.get('p') : S.profile && S.profile.id); }
   else if (h.has('hof')) { S.view = 'hof'; openHof(); }
+  else if (h.has('admin')) { S.view = 'admin'; openAdmin(); }
+  else if (h.has('key')) { S.keyIn = P.normKey(h.get('key')); S.view = 'home'; } // lien de récupération envoyé par le joueur à lui-même
   else { S.view = 'home'; }
   render(); window.scrollTo(0, 0);
 }
@@ -564,6 +569,19 @@ async function linkProfile() {
 function unlinkProfile() {
   S.profile = null; S.me = null; S.confirm = null; LS.set('sc_profile', null); go('');
 }
+/** Le profil de ce téléphone n'existe plus en ligne (doublon supprimé par l'admin) : on le délie. */
+function profileGone() {
+  S.profile = null; S.me = null; LS.set('sc_profile', null);
+  S.err = 'Votre profil a été supprimé (doublon). Retrouvez le bon avec son code, ou créez-en un.';
+}
+/** Lien qui pré-remplit le code de profil, à garder dans ses notes ou à s'envoyer. */
+const keyLink = key => location.origin + location.pathname + '#key=' + key;
+async function shareKey() {
+  const key = S.profile && S.profile.key; if (!key) return;
+  const text = `Mon code de profil Street Coincheur : ${key}`;
+  try { await navigator.share({ title: 'Street Coincheur', text, url: keyLink(key) }); }
+  catch (e) { if (e.name !== 'AbortError') { try { await navigator.clipboard.writeText(text + '\n' + keyLink(key)); } catch (e2) {} } }
+}
 
 /** Charge un profil : fiches de donne, classements à jour des tournois joués. Le sien est republié (hall of fame). */
 async function loadProfile(pid) {
@@ -593,7 +611,11 @@ async function loadProfile(pid) {
 async function openProfile(pid) {
   if (!pid) { S.prof = { missing: true }; return; }
   S.prof = { pid, loading: true };
-  try { const p = await loadProfile(pid); if (S.prof && S.prof.pid === pid) S.prof = p || { pid, missing: true }; }
+  try {
+    const p = await loadProfile(pid);
+    if (!p && isMe(pid) && NET.mode === 'online') profileGone();
+    if (S.prof && S.prof.pid === pid) S.prof = p || { pid, missing: true };
+  }
   catch (e) { S.prof = { pid, missing: true }; S.err = 'Chargement du profil impossible (' + (e.code || e.message) + ').'; }
   render();
 }
@@ -606,6 +628,60 @@ async function openHof() {
     S.hof = { players: ps };
   } catch (e) { S.hof = { players: [] }; S.err = 'Chargement du hall of fame impossible (' + (e.code || e.message) + ').'; }
   render();
+}
+
+/* ---------- Administration des profils : doublons, codes. Réservée aux téléphones qui ont saisi le code admin ;
+   ce sont les règles Firestore qui l'imposent (admins/<uid> ne se crée qu'avec un code existant dans adminKeys). ---------- */
+async function checkAdmin() {
+  try { S.admin = !!(await NET.get('admins/' + NET.uid)); } catch (e) { S.admin = false; }
+}
+async function claimAdmin() {
+  const key = P.normAdmin(S.adminIn);
+  if (key.length < 9) { S.err = 'Entrez le code admin (XXXX-XXXX-XXXX-XXXX).'; render(); return; }
+  S.busy = true; render();
+  try {
+    await NET.create('admins/' + NET.uid, { key, name: S.name || '', at: Date.now() });
+    S.admin = true; S.adminIn = ''; S.busy = false; openAdmin();
+  } catch (e) {
+    S.busy = false;
+    S.err = e.code === 'permission-denied' ? 'Code admin incorrect.' : 'Vérification impossible (' + (e.code || e.message) + ').';
+    render();
+  }
+}
+async function dropAdmin() {
+  S.busy = true; S.confirm = null; render();
+  try { await NET.removeTree('admins/' + NET.uid); S.admin = false; S.adm = null; }
+  catch (e) { S.err = 'Impossible de quitter le mode admin (' + (e.code || e.message) + ').'; }
+  S.busy = false; render();
+}
+async function openAdmin() {
+  if (!S.admin) { S.adm = null; render(); return; }
+  S.adm = S.adm || { loading: true }; render();
+  try {
+    const [ps, keys] = await Promise.all([NET.getCol('players'), NET.getCol('profileKeys')]);
+    // nombre réel de fiches : le résumé publié n'est à jour que quand le joueur ouvre l'app
+    const counts = {};
+    await Promise.all(ps.map(async p => { try { counts[p.id] = await NET.count(`players/${p.id}/deals`); } catch (e) {} }));
+    S.adm = P.adminRows(ps, keys, counts);
+  } catch (e) { S.adm = { rows: [], orphans: [], dupGroups: 0 }; S.err = 'Chargement des profils impossible (' + (e.code || e.message) + ').'; }
+  render();
+}
+/** Supprime un profil : ses fiches de donne, le profil, ses codes de récupération. */
+async function delProfile(pid) {
+  const row = S.adm && S.adm.rows.find(r => r.id === pid); if (!row) return;
+  S.busy = true; S.confirm = null; render();
+  try {
+    await NET.removeTree('players/' + pid, ['deals']);
+    for (const k of row.codes) await NET.removeTree('profileKeys/' + k);
+    if (isMe(pid)) profileGone();
+  } catch (e) { S.err = 'Suppression impossible (' + (e.code || e.message) + ').'; }
+  S.busy = false; await openAdmin();
+}
+async function delOrphans() {
+  S.busy = true; S.confirm = null; render();
+  try { for (const k of S.adm.orphans) await NET.removeTree('profileKeys/' + k); }
+  catch (e) { S.err = 'Suppression impossible (' + (e.code || e.message) + ').'; }
+  S.busy = false; await openAdmin();
 }
 
 function profileBlock() {
@@ -661,8 +737,9 @@ function viewProfile() {
       : `<div class="sheet pad"><p class="muted small">Aucune donne enregistrée. Asseyez-vous à une table en ligne ou de tournoi : chaque donne jouée compte.</p></div>`}</section>
     ${tourRows ? `<section class="section"><h2>Mes tournois</h2><div class="sheet list">${tourRows}</div><p class="muted small">Place dans le classement de sa ligne (Nord-Sud ou Est-Ouest), en points de match.</p></section>` : ''}
     <button class="btn gold block" data-a="go" data-h="hof">Hall of fame</button>
-    ${mine ? `<section class="section kill sheet pad stack"><p class="eyebrow">Code de profil</p><p class="url num">${esc(S.profile.key || '')}</p>
-      <p class="muted small">Notez-le : il permet de retrouver ce profil sur un autre téléphone. Ne le partagez pas, il donne accès au profil.</p>
+    ${mine ? `<section class="section kill sheet pad stack"><p class="eyebrow">Code de profil</p><p class="url num" id="profKey">${esc(S.profile.key || '')}</p>
+      ${S.profile.key ? `<div class="row"><button class="btn sm" data-a="copyKey">Copier</button>${navigator.share ? '<button class="btn sm" data-a="shareKey">Envoyer dans mes notes…</button>' : ''}</div>` : ''}
+      <p class="muted small">Gardez-le dans vos notes : il permet de retrouver ce profil sur un autre téléphone (le lien envoyé le pré-remplit). Ne le donnez à personne, il donne accès au profil.</p>
       ${S.confirm === 'unlink' ? `<p class="small"><b>Retirer le profil de ce téléphone ?</b> <span class="muted">Il reste enregistré ; vous le retrouverez avec le code.</span></p>
         <div class="row"><button class="btn danger" data-a="unlinkProfile">Oui, retirer</button><button class="btn ghost" data-a="confirm" data-c="">Annuler</button></div>`
       : `<button class="btn ghost" data-a="confirm" data-c="unlink" style="align-self:flex-start">Retirer de ce téléphone</button>`}</section>` : ''}
@@ -683,6 +760,38 @@ function viewHof() {
     ${errBox()}
     ${S.profile ? '' : `<div class="sheet pad stack"><p class="small">Pas encore de profil ? Créez-le depuis l'accueil pour entrer au classement.</p></div>`}
     ${boards || '<div class="sheet pad"><p class="muted small">Aucune donne enregistrée pour l\'instant. Les tableaux se remplissent dès que des joueurs avec profil jouent.</p></div>'}
+    ${NET && NET.mode === 'online' ? `<button class="lnk" data-a="go" data-h="admin" style="align-self:flex-start;color:var(--muted)">Administration</button>` : ''}
+  </div>`;
+}
+
+function viewAdmin() {
+  const head = `${back('Hall of fame', 'hof')}<div class="stack" style="gap:4px"><p class="eyebrow">Administration</p><h1>Profils joueurs</h1></div>${errBox()}`;
+  if (!NET || NET.mode !== 'online') return `<div class="wrap">${head}<p class="muted">L'administration n'est disponible qu'en ligne.</p></div>`;
+  if (S.admin === null) return `<div class="wrap">${head}<p class="muted">Chargement…</p></div>`;
+  if (!S.admin) return `<div class="wrap">${head}<div class="sheet pad stack">
+    <p class="small">Réservé à l'organisateur. Le code se saisit une fois par téléphone.</p>
+    <div class="row join"><input id="adminKey" type="text" data-f="adminKey" maxlength="19" placeholder="XXXX-XXXX-XXXX-XXXX" value="${esc(S.adminIn)}" aria-label="Code admin" autocapitalize="characters" autocomplete="off" spellcheck="false"><button class="btn" data-a="claimAdmin" ${S.busy ? 'disabled' : ''}>Valider</button></div></div></div>`;
+  const a = S.adm;
+  if (!a || a.loading) return `<div class="wrap">${head}<p class="muted">Chargement des profils…</p></div>`;
+  const pl = (n, w) => `${n} ${w}${n > 1 ? 's' : ''}`;
+  const rows = a.rows.map(r => {
+    const ask = S.confirm === 'del:' + r.id;
+    return `<div class="item" style="flex-direction:column;align-items:stretch"><div class="row between" style="gap:12px">
+      <span class="stack" style="gap:2px;min-width:0"><b>${esc(r.name || 'Sans nom')}${isMe(r.id) ? ' <span class="you">vous</span>' : ''}${r.keep ? ' <span class="you">à garder ?</span>' : r.dups ? ' <span class="you" style="background:var(--bad);color:#fff">doublon</span>' : ''}</b>
+        <span class="meta">${pl(r.deals, 'donne')} · créé le ${dateTxt(r.createdAt) || '?'} · vu le ${dateTxt(r.updatedAt) || '?'}</span>
+        <span class="meta">Code : ${r.codes.length ? r.codes.map(c => `<b>${esc(c)}</b>`).join(', ') : 'aucun'} · ${esc(r.id)}</span></span>
+      <span class="stack" style="gap:6px;align-items:flex-end"><a class="lnk" href="#p=${esc(r.id)}">Voir</a>
+        ${ask ? '' : `<button class="btn sm danger" data-a="confirm" data-c="del:${esc(r.id)}" ${S.busy ? 'disabled' : ''}>Supprimer</button>`}</span></div>
+      ${ask ? `<p class="small"><b>Supprimer ${esc(r.name || 'ce profil')} et ses ${pl(r.deals, 'donne')} ?</b> <span class="muted">Définitif. Son téléphone sera délié à la prochaine ouverture de l'app.</span></p>
+        <div class="row"><button class="btn sm danger" data-a="delProfile" data-id="${esc(r.id)}" ${S.busy ? 'disabled' : ''}>Oui, supprimer</button><button class="btn sm ghost" data-a="confirm" data-c="">Annuler</button></div>` : ''}</div>`;
+  }).join('');
+  return `<div class="wrap">${head}
+    <p class="muted small">${pl(a.rows.length, 'profil')} · ${pl(a.dupGroups, 'doublon probable')} (même prénom). « À garder ? » : dans chaque groupe, celui qui a le plus de donnes.</p>
+    <div class="sheet list">${rows || '<div class="pad"><p class="muted small">Aucun profil.</p></div>'}</div>
+    ${a.orphans.length ? `<div class="sheet pad stack"><p class="small">${pl(a.orphans.length, 'code')} de récupération sans profil : <span class="num">${a.orphans.map(esc).join(' · ')}</span></p>
+      <button class="btn sm ghost" data-a="delOrphans" style="align-self:flex-start" ${S.busy ? 'disabled' : ''}>Les supprimer</button></div>` : ''}
+    <p class="muted small">Avant de supprimer un doublon, donnez au joueur le code du profil gardé : il le saisit dans « Retrouver » sur l'accueil.</p>
+    <button class="lnk" data-a="dropAdmin" style="align-self:flex-start">Quitter le mode admin sur ce téléphone</button>
   </div>`;
 }
 
@@ -902,7 +1011,7 @@ function render() {
   const sc = window.scrollY;
   let html;
   if (S.view === 'table' && S.cur) html = viewTable();
-  else html = ({ home: viewHome, create: viewCreate, tour: viewTour, profile: viewProfile, hof: viewHof }[S.view] || viewHome)();
+  else html = ({ home: viewHome, create: viewCreate, tour: viewTour, profile: viewProfile, hof: viewHof, admin: viewAdmin }[S.view] || viewHome)();
   // Rien n'a changé : on garde le DOM tel quel, sinon un tap en cours sur un bouton remplacé est perdu.
   if (html === lastHtml) return;
   lastHtml = html;
@@ -921,6 +1030,7 @@ $app.addEventListener('input', e => {
   if (t.dataset.f === 'tname') S.form.name = t.value;
   if (t.dataset.f === 'code') S.code = t.value.toUpperCase();
   if (t.dataset.f === 'key') S.keyIn = t.value.toUpperCase();
+  if (t.dataset.f === 'adminKey') S.adminIn = t.value.toUpperCase();
 });
 $app.addEventListener('click', async e => {
   const b = e.target.closest('[data-a]'); if (!b || b.disabled) return;
@@ -954,6 +1064,15 @@ $app.addEventListener('click', async e => {
     case 'createProfile': createProfile(); break;
     case 'linkProfile': linkProfile(); break;
     case 'unlinkProfile': unlinkProfile(); break;
+    case 'copyKey':
+      try { await navigator.clipboard.writeText(S.profile.key); b.textContent = 'Code copié'; }
+      catch (err) { const r = document.createRange(); r.selectNodeContents(document.getElementById('profKey')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = 'Code sélectionné'; }
+      break;
+    case 'shareKey': shareKey(); break;
+    case 'claimAdmin': claimAdmin(); break;
+    case 'dropAdmin': dropAdmin(); break;
+    case 'delProfile': delProfile(d.id); break;
+    case 'delOrphans': delOrphans(); break;
     case 'confirm': S.confirm = d.c || null; render(); break;
     case 'leave': act({ type: 'leave', seat: +d.s }); break;
     case 'bot': act({ type: 'bot', seat: +d.s }); break;
@@ -1028,7 +1147,9 @@ setInterval(checkVersion, 10 * 60000);
   } else { NET = LOCAL; S.net = 'local'; }
   if (NET.mode === 'online') subs.rooms = NET.watchCol('rooms', rs => { S.rooms = rs.filter(r => r.seats).sort((a, b) => roomActivity(b) - roomActivity(a)); if (S.view === 'home') render(); });
   subs.tours = NET.watchCol('tournaments', ts => { S.tours = ts.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); render(); });
-  if (S.profile) NET.get('players/' + S.profile.id).then(p => { S.me = p; render(); }).catch(() => {});
+  if (S.profile) NET.get('players/' + S.profile.id).then(p => { if (!p && NET.mode === 'online') profileGone(); else S.me = p; render(); }).catch(() => {});
+  if (NET.mode === 'online') checkAdmin().then(() => (S.view === 'admin' ? openAdmin() : render()));
+  else S.admin = false;
   route();
   checkVersion();
 })();
