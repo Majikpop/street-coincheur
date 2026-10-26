@@ -558,3 +558,16 @@ test('coinche à la volée : un défenseur coinche hors de son tour, sauf en MOC
   assert.ok(!E.canCoinche(m, S) && E.canCoinche(m, N));
   assert.throws(() => E.applyBid(m, S, { type: 'coinche' }), /Pas votre tour/);
 });
+
+test('IA : ouvre une main solide, passe une main vide, coinche quand elle tient les atouts adverses', () => {
+  const deal = hands => ({ idx: 0, dealer: O, hands: hands.map(hand) }); // Sud parle en premier
+  const g = E.newGame(deal(['JS 9S AS 10S AH 10H AD 7C', '7H 8H 9H QH 7D 8D 9D 8C', 'KS QS 8S 7S KH JH QD JD', '10D KD 9C 10C JC QC KC AC']));
+  const b = E.botBid(g, S);
+  assert.equal(b.type, 'bid'); assert.equal(b.suit, 'S');
+  const w = E.newGame(deal(['7S 8S 7H 8H 7D 8D 7C 8C', 'JS 9S AS 10S AH 10H AD 9C', 'KS QS 9H QH 9D QD KC QC', 'KH JH 10D KD JD 10C JC AC']));
+  assert.equal(E.botBid(w, S).type, 'pass');
+  // Est annonce 120 à pique ; Nord tient valet, 9, as d'atout et trois as : coinche
+  const c = E.newGame({ idx: 0, dealer: S, hands: [hand('7H 8H 9H QH 7D 8D 9D 8C'), hand('KS QS 10S 7S KH 10H KD 10D'), hand('JS 9S AS AH AD AC 10C 9C'), hand('8S JH QD JD KC QC JC 7C')] });
+  E.applyBid(c, EST, { type: 'bid', value: 120, suit: 'S' });
+  assert.deepEqual(E.botBid(c, N), { type: 'coinche' });
+});
