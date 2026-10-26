@@ -84,6 +84,7 @@ const E = (() => {
       idx: deal.idx, dealer: deal.dealer, hands: deal.hands.map(h => h.slice()), initialHands: deal.hands.map(h => h.slice()),
       phase: 'bid', turn: first, bids: [], contract: null, passes: 0, surQueue: null,
       trick: [], leader: first, tricks: [], played: [], beloteSeat: null, beloteSaid: 0, result: null, moc: !!opts.moc,
+      ...(opts.belote === false ? { noBelote: true } : {}),
     };
   }
 
@@ -146,18 +147,18 @@ const E = (() => {
     const follow = hand.filter(c => c.s === led);
     const partnerMaster = team(trickWinner(g.trick, trump)) === team(seat);
     if (trump === 'NT') return follow.length ? follow : hand.slice();
-    if (trump === 'AT') { // fournir, et monter dans la couleur demandée sauf si le partenaire est maître
+    if (trump === 'AT') { // fournir, et monter dans la couleur demandée, même sur son partenaire
       if (!follow.length) return hand.slice();
       const best = Math.max(...g.trick.filter(x => x.card.s === led).map(x => TRUMP_ORD.indexOf(x.card.r)));
       const up = follow.filter(c => TRUMP_ORD.indexOf(c.r) > best);
-      return up.length && !partnerMaster ? up : follow;
+      return up.length ? up : follow;
     }
     const trumpsInTrick = g.trick.filter(x => x.card.s === trump).map(x => TRUMP_ORD.indexOf(x.card.r));
     const bestT = trumpsInTrick.length ? Math.max(...trumpsInTrick) : -1;
     const myTrumps = hand.filter(c => c.s === trump);
     const higher = myTrumps.filter(c => TRUMP_ORD.indexOf(c.r) > bestT);
     if (led === trump) {
-      if (follow.length) return higher.length && !partnerMaster ? higher : follow; // partenaire maître : pas obligé de monter
+      if (follow.length) return higher.length ? higher : follow; // atout demandé : monter si possible, même sur son partenaire
       return hand.slice();
     }
     if (follow.length) return follow;
@@ -170,7 +171,7 @@ const E = (() => {
     if (g.phase !== 'play' || g.turn !== seat) throw new Error('Pas votre tour');
     if (!legalCards(g, seat).some(c => sameCard(c, card))) throw new Error('Carte interdite');
     const t = g.contract.suit;
-    if (SUITS.includes(t) && card.s === t && (card.r === 'K' || card.r === 'Q')) {
+    if (!g.noBelote && SUITS.includes(t) && card.s === t && (card.r === 'K' || card.r === 'Q')) {
       const other = card.r === 'K' ? 'Q' : 'K';
       if (g.beloteSeat === seat) g.beloteSaid++;
       else if (g.beloteSeat === null && g.hands[seat].some(c => c.s === t && c.r === other)) { g.beloteSeat = seat; g.beloteSaid = 1; }

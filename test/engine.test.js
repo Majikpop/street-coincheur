@@ -136,6 +136,20 @@ test('donne complète scriptée : capot et belote du preneur', () => {
   assert.deepEqual([g.result.ns, g.result.ew], [80 + 250 + 20, 0]);
 });
 
+test('option sans belote : roi et dame d\'atout ne rapportent rien', () => {
+  const deal = { idx: 0, dealer: O, hands: [
+    hand('7S 8S 9S 10S JS QS KS AS'), hand('7H 8H 9H 10H JH QH KH AH'),
+    hand('7D 8D 9D 10D JD QD KD AD'), hand('7C 8C 9C 10C JC QC KC AC'),
+  ] };
+  const g = E.newGame(deal, { belote: false });
+  E.applyBid(g, S, { type: 'bid', value: 80, suit: 'S' });
+  for (const s of [EST, N, O]) E.applyBid(g, s, { type: 'pass' });
+  while (g.phase === 'play') E.playCard(g, g.turn, E.legalCards(g, g.turn)[0]);
+  assert.equal(g.beloteSeat, null);
+  assert.equal(g.result.belote, null);
+  assert.deepEqual([g.result.ns, g.result.ew], [80 + 250, 0]);
+});
+
 test('duplicate : la même donne jouée par les mêmes IA donne le même résultat', () => {
   for (let i = 0; i < 10; i++) {
     const a = playDeal(E.makeDeal('dup', i)), b = playDeal(E.makeDeal('dup', i));
@@ -405,9 +419,11 @@ test('cartes : partenaire maître, défausse libre', () => {
   assert.deepEqual(legal(g), ['7S', '9C']);
 });
 
-test('cartes : monter à l\'atout demandé, sauf partenaire maître', () => {
+test('cartes : monter à l\'atout demandé, même sur son partenaire', () => {
   const g = inPlay(['9S 7D', '10S 7D', 'JS 7S 8D', '8D'], 'S', [[S, '9S'], [EST, '10S']]);
-  assert.deepEqual(legal(g), ['7S', 'JS']); // Sud (partenaire) maître avec le 9 : pas obligé de monter
+  assert.deepEqual(legal(g), ['JS']); // Sud (partenaire) maître avec le 9 : Nord doit quand même monter avec le valet
+  const f = inPlay(['JS 7D', '10S 7D', '9S 7S 8D', '8D'], 'S', [[S, 'JS'], [EST, '10S']]);
+  assert.deepEqual(legal(f), ['7S', '9S']); // impossible de monter sur le valet : on fournit librement
   const h = inPlay(['10S 7D', 'AS 7D', 'JS 7S 8D', '8D'], 'S', [[S, '10S'], [EST, 'AS']]);
   assert.deepEqual(legal(h), ['JS']); // Est maître avec l'as : Nord doit monter
 });
@@ -417,6 +433,8 @@ test('cartes : sans atout et tout atout', () => {
   assert.deepEqual(legal(nt), ['KH']);
   const at = inPlay(['9H 7D', '7H JH 8D', '9D', '10D'], 'AT', [[S, '9H']]);
   assert.deepEqual(legal(at), ['JH']); // tout atout : il faut monter dans la couleur
+  const atp = inPlay(['9H 7D', '8H 7S', '7H JH 8D', '10D'], 'AT', [[S, '9H'], [EST, '8H']]);
+  assert.deepEqual(legal(atp), ['JH']); // tout atout : monter même sur son partenaire maître
   assert.equal(E.trickWinner([{ seat: S, card: c('9H') }, { seat: EST, card: c('JS') }], 'AT'), S);
 });
 
