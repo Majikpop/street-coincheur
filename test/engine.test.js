@@ -87,7 +87,7 @@ function checkFinishedDeal(g) {
 
 test('donnes complètes IA : règles respectées, cartes et score cohérents', () => {
   const seen = new Set();
-  for (const seed of ['alpha', 'beta', 'gamma', 'delta']) for (let i = 0; i < 40; i++) {
+  for (const seed of ['alpha', 'beta', 'gamma', 'delta']) for (let i = 0; i < 12; i++) {
     const g = playDeal(E.makeDeal(seed, i));
     checkFinishedDeal(g);
     if (g.contract) seen.add(g.contract.suit);

@@ -48,7 +48,7 @@ Sans `config.js` rempli, le jeu fonctionne hors ligne (parties sur le téléphon
 ## Tests
 Aucune dépendance, Node 18 ou plus : `npm test` (ou `node --test`).
 
-Niveau de l'IA : `npm run bench`. Pour comparer à la version en ligne : `git show main:engine.js > /tmp/ancien.js` puis `npm run bench -- --vs /tmp/ancien.js` (écart moyen par donne en duplicate, camps inversés sur chaque donne).
+Niveau de l'IA : `npm run bench`. Pour comparer à la version en ligne : `git show main:engine.js > /tmp/ancien.js` puis `npm run bench -- --vs /tmp/ancien.js` (écart moyen par donne en duplicate, camps inversés sur chaque donne, avec sa marge d'erreur). Compter quelques minutes pour 1 000 donnes : l'IA simule la fin de donne avant chaque carte.
 
 ## Limites connues (V1 pilote)
 - Pas d'annonces de carrés ou suites (enchères à la couleur, sans atout et tout atout disponibles).
