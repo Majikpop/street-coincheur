@@ -84,7 +84,7 @@ const E = (() => {
       idx: deal.idx, dealer: deal.dealer, hands: deal.hands.map(h => h.slice()), initialHands: deal.hands.map(h => h.slice()),
       phase: 'bid', turn: first, bids: [], contract: null, passes: 0, surQueue: null,
       trick: [], leader: first, tricks: [], played: [], beloteSeat: null, beloteSaid: 0, result: null, moc: !!opts.moc,
-      ...(opts.belote === false ? { noBelote: true } : {}),
+      ...(opts.belote === false ? { noBelote: true } : {}), ...(opts.strict ? { strict: true } : {}),
     };
   }
 
@@ -168,7 +168,9 @@ const E = (() => {
     }
     if (follow.length) return follow;
     if (!myTrumps.length) return hand.slice();
-    if (partnerMaster) return hand.slice(); // partenaire maître : défausse libre, pas d'obligation de couper ni de surcouper
+    // partenaire maître : défausse libre, pas d'obligation de couper ni de surcouper ;
+    // règle stricte (option) : s'il a coupé, on doit surcouper si on peut
+    if (partnerMaster) return g.strict && bestT >= 0 && higher.length ? higher : hand.slice();
     return higher.length ? higher : myTrumps; // couper / surcouper, sinon sous-couper
   }
 

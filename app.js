@@ -195,7 +195,7 @@ async function createRoom() {
 }
 async function createTournament() {
   const f = S.form, id = 't' + Date.now().toString(36) + rnd().slice(0, 4);
-  const tour = { id, name: f.name.trim() || 'Tournoi du ' + new Date().toLocaleDateString('fr-FR'), tables: f.tables, perSet: f.perSet, ...(f.belote === false ? { belote: false } : {}), speed: SPEEDS[f.speed] ? f.speed : 'normal', owner: NET.uid, createdAt: Date.now() };
+  const tour = { id, name: f.name.trim() || 'Tournoi du ' + new Date().toLocaleDateString('fr-FR'), tables: f.tables, perSet: f.perSet, ...(f.belote === false ? { belote: false } : {}), ...(f.strict ? { strict: true } : {}), speed: SPEEDS[f.speed] ? f.speed : 'normal', owner: NET.uid, createdAt: Date.now() };
   S.busy = true; render();
   try { await NET.set('tournaments/' + id, tour); await NET.setMany(T.tourHands(tour, rnd() + rnd())); S.busy = false; go('t=' + id); }
   catch (e) { S.busy = false; S.err = 'Création impossible (' + (e.code || e.message) + ').'; render(); }
@@ -350,7 +350,7 @@ function viewHome() {
     ? `<div class="item kill-row"><span class="small"><b>Supprimer « ${esc(t.name)} » ?</b> <span class="muted">Tables et résultats effacés pour tout le monde.</span></span>
       <span class="row"><button class="btn danger sm" data-a="killTour" data-id="${esc(t.id)}" ${S.busy ? 'disabled' : ''}>${S.busy ? '…' : 'Oui'}</button><button class="btn ghost sm" data-a="confirm" data-c="">Non</button></span></div>`
     : `<div class="item tour-row"><button class="tour-open" data-a="go" data-h="t=${esc(t.id)}">
-      <span class="stack" style="gap:2px"><b>${esc(t.name)}</b><span class="meta">${t.tables} table${t.tables > 1 ? 's' : ''} · séries de ${t.perSet} donnes${t.belote === false ? ' · sans belote' : ''}</span></span>
+      <span class="stack" style="gap:2px"><b>${esc(t.name)}</b><span class="meta">${t.tables} table${t.tables > 1 ? 's' : ''} · séries de ${t.perSet} donnes${t.belote === false ? ' · sans belote' : ''}${t.strict ? ' · surcoupe obligatoire' : ''}</span></span>
       <span class="chev" aria-hidden="true">›</span></button><button class="btn danger sm" data-a="confirm" data-c="kill:${esc(t.id)}" aria-label="Supprimer le tournoi ${esc(t.name)}">Kill</button></div>`).join('');
   const online = S.net === 'online';
   return `<div class="wrap">
@@ -417,7 +417,12 @@ function freeOptions() {
     <button class="moc ${o.moc ? 'on' : ''}" data-a="optMoc" aria-pressed="${o.moc}"><span class="mbox" aria-hidden="true">${o.moc ? '✓' : ''}</span>
       <span><b>Mode MOC</b> · Monte ou Coinche<br><span class="muted small">Interdit de passer, dès l'entame : on surenchérit ou on coinche. Seule une coinche arrête l'enchère.</span></span></button>
     ${beloteToggle(o.belote !== false, 'optBelote')}
+    ${strictToggle(!!o.strict, 'optStrict')}
     ${speedChips(o.speed, 'optSpeed')}</div>`;
+}
+function strictToggle(on, action) {
+  return `<button class="moc opt ${on ? 'on' : ''}" data-a="${action}" aria-pressed="${on}"><span class="mbox" aria-hidden="true">${on ? '✓' : ''}</span>
+      <span><b>Surcoupe obligatoire</b><br><span class="muted small">Règle stricte : si votre partenaire a coupé et que vous ne pouvez pas fournir, il faut surcouper quand on peut. Sinon (règle officielle), défausse libre.</span></span></button>`;
 }
 function speedChips(cur, action) {
   cur = SPEEDS[cur] ? cur : 'normal';
@@ -435,7 +440,7 @@ function rulesBlock() {
     <li>32 cartes, jeu dans le sens inverse des aiguilles d'une montre. Atout : J 20, 9 14, A 11, 10 10, K 4, Q 3. Hors atout : A 11, 10 10, K 4, Q 3, J 2. (J = valet, Q = dame, K = roi.)</li>
     <li>Enchères de 80 à 160 puis capot, à la couleur, sans atout (SA) ou tout atout (TA). Coinche par la défense, à tout moment des enchères, même hors de son tour (sauf en MOC) ; surcoinche par l'équipe preneuse.</li>
     <li>Fournir à la couleur demandée si on peut. Sinon, couper si l'adversaire est maître (en surcoupant si possible, sinon en sous-coupant).</li>
-    <li>Partenaire maître (à la couleur ou parce qu'il a coupé) : on fournit si on peut, sinon défausse libre ; pas d'obligation de couper ni de surcouper.</li>
+    <li>Partenaire maître (à la couleur ou parce qu'il a coupé) : on fournit si on peut, sinon défausse libre ; pas d'obligation de couper ni de surcouper (option « surcoupe obligatoire » : si le partenaire a coupé, on surcoupe quand on peut).</li>
     <li>Atout demandé : on fournit et on monte si on peut, même quand son partenaire est maître.</li>
     <li>Sans atout (SA) : pas d'atout, on fournit, la plus forte de la couleur demandée gagne. As 19, 10 10, K 4, Q 3, J 2.</li>
     <li>Tout atout (TA) : chaque couleur est atout ; on fournit et on monte dans la couleur demandée, même sur son partenaire. J 14, 9 9, A 6, 10 5, K 3, Q 1. Pas de belote en SA ni en TA.</li>
@@ -456,6 +461,7 @@ function viewCreate() {
       <div class="stepper"><button data-a="step" data-k="perSet" data-d="-1" aria-label="Moins">−</button><output class="num">${f.perSet}</output><button data-a="step" data-k="perSet" data-d="1" aria-label="Plus">+</button></div>
       <p class="muted small">Règle le rythme : une table joue sa série, puis passe à la suivante sans attendre les autres.</p></div>
     ${beloteToggle(f.belote !== false, 'tourBelote')}
+    ${strictToggle(!!f.strict, 'tourStrict')}
     ${speedChips(f.speed, 'tourSpeed')}
     <div class="sheet pad stack small"><p><b>${f.tables} série${f.tables > 1 ? 's' : ''} de ${f.perSet} donnes</b>, soit <b>${f.tables * f.perSet} donnes</b> par table.</p>
       <p class="muted">Au tour 1, la table 1 joue la série A, la table 2 la série B… Chaque série passe ensuite à la table suivante.</p></div>
@@ -508,7 +514,7 @@ function viewTour() {
   }).join('') : `<p class="muted small">Les donnes apparaîtront ici dès qu'une table aura joué.</p>`;
   return `<div class="wrap">${back('Tournois', '')}
     <div class="stack" style="gap:4px"><p class="eyebrow">Tournoi duplicate</p><h1>${esc(t.name)}</h1>
-      <p class="muted small">${t.tables} tables · séries de ${t.perSet} donnes${t.belote === false ? ' · sans belote' : ''} · ${S.results.length} résultat${S.results.length > 1 ? 's' : ''}</p></div>
+      <p class="muted small">${t.tables} tables · séries de ${t.perSet} donnes${t.belote === false ? ' · sans belote' : ''}${t.strict ? ' · surcoupe obligatoire' : ''} · ${S.results.length} résultat${S.results.length > 1 ? 's' : ''}</p></div>
     ${errBox()}
     ${shareBox(`Tournoi « ${t.name} » : choisis ta table`, 't=' + t.id)}
     <section class="section"><h2>Tables</h2><div class="sheet list">${tables}</div></section>
@@ -833,7 +839,7 @@ function viewLobby(d, title, backH) {
   return `<div class="wrap">${back('Retour', backH)}
     <div class="select-title"><p class="eyebrow">${c.kind === 'tour' ? 'Tournoi duplicate' : 'Partie libre'} · ${title}</p><h1>Sélection des joueurs</h1>
       ${d.kind === 'tour' && d.status !== 'finished' ? `<p class="muted small">Prochaine donne : série ${LETTER(E.setForTable(d.tour.tables, d.table, d.round))}, tour ${d.round + 1}</p>` : ''}
-      ${d.kind === 'free' ? `<p class="muted small">Partie en ${d.target}${d.moc ? ' · <b class="mocb">MOC</b> Monte ou Coinche' : ''}${d.belote === false ? ' · sans belote' : ''}${d.n ? ` · NS ${d.scores[0]} · EO ${d.scores[1]}` : ''}</p>` : ''}</div>
+      ${d.kind === 'free' ? `<p class="muted small">Partie en ${d.target}${d.moc ? ' · <b class="mocb">MOC</b> Monte ou Coinche' : ''}${d.belote === false ? ' · sans belote' : ''}${d.strict ? ' · surcoupe obligatoire' : ''}${d.n ? ` · NS ${d.scores[0]} · EO ${d.scores[1]}` : ''}</p>` : ''}</div>
     ${errBox()}
     ${needName ? nameField('lobbyName') : ''}
     ${c.kind === 'free' && !c.local ? shareBox(`Viens jouer à la coinche, table ${d.code} :`, 'r=' + d.code) : ''}
@@ -1047,6 +1053,8 @@ $app.addEventListener('click', async e => {
     case 'optBelote': S.freeOpts = { ...S.freeOpts, belote: S.freeOpts.belote === false }; LS.set('sc_free', S.freeOpts); render(); break;
     case 'optSpeed': S.freeOpts = { ...S.freeOpts, speed: d.v }; LS.set('sc_free', S.freeOpts); render(); break;
     case 'tourSpeed': S.form = { ...S.form, speed: d.v }; render(); break;
+    case 'optStrict': S.freeOpts = { ...S.freeOpts, strict: !S.freeOpts.strict }; LS.set('sc_free', S.freeOpts); render(); break;
+    case 'tourStrict': S.form = { ...S.form, strict: !S.form.strict }; render(); break;
     case 'tourBelote': S.form = { ...S.form, belote: S.form.belote === false }; render(); break;
     case 'joinCode': { const c = S.code.trim().toUpperCase(); if (c.length === 4) go('r=' + c); else { S.err = 'Le code de table compte 4 lettres.'; render(); } break; }
     case 'step': { const lim = d.k === 'tables' ? [1, 12] : [1, 16]; S.form[d.k] = Math.min(lim[1], Math.max(lim[0], S.form[d.k] + +d.d)); render(); break; }

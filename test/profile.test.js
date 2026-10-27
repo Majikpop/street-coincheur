@@ -171,3 +171,10 @@ test('admin : code normalisé, doublons probables, profil à garder, codes orphe
   assert.deepEqual(a.rows.find(r => r.id === 'p2').codes, ['AAAA-BBBB']);
   assert.equal(a.rows.find(r => r.id === 'p4').deals, 0);
 });
+
+test('option surcoupe obligatoire : choisie à la création, transmise à chaque donne', () => {
+  const d = T.initFree('ABCD', { strict: true });
+  d.seats = [{ uid: 'u', name: 'A', bot: false }, ...[1, 2, 3].map(i => ({ uid: null, name: 'IA ' + i, bot: true }))];
+  assert.equal(JSON.parse(T.apply(d, { type: 'start' }, 'u').doc.game).strict, true);
+  assert.equal(T.initTour({ id: 't', name: 'X', tables: 1, perSet: 2, strict: true }, 0).tour.strict, true);
+});
