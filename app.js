@@ -318,7 +318,9 @@ function scheduleBot() {
   const rank = d.seats.filter(s => !s.bot && s.uid).findIndex(s => s.uid === uid());
   const wait = Math.max(0, S.pauseUntil - Date.now()) + speedOf(d)[g.phase === 'bid' ? 'bid' : 'card'] + Math.max(0, rank) * 350;
   const rev = d.rev, seat = g.turn;
-  botTimer = setTimeout(() => { if (S.doc && S.doc.rev === rev) S.cur.net.act(S.cur.path, S.cur.init, { type: 'botmove', seat, rev, hands: myHands() }).catch(() => {}); }, wait);
+  // Échec réseau ou transaction abandonnée : aucun nouvel état n'arrivera pour relancer l'IA, on retente.
+  const retry = () => { if (S.doc && S.doc.rev === rev) botTimer = setTimeout(scheduleBot, 2000); };
+  botTimer = setTimeout(() => { if (S.doc && S.doc.rev === rev) S.cur.net.act(S.cur.path, S.cur.init, { type: 'botmove', seat, rev, hands: myHands() }).catch(retry); }, wait);
 }
 
 /* ---------- Rendu : éléments communs ---------- */
