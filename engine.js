@@ -342,11 +342,14 @@ const E = (() => {
     return { type: 'pass' };
   }
 
+  const DECK = SUITS.flatMap(s => RANKS.map(r => Object.freeze({ s, r })));
+  const bit = c => 1 << (SUITS.indexOf(c.s) * 8 + RANKS.indexOf(c.r));
+  /** Cartes que seat n'a pas vues (ni jouées, ni en main), en masque de bits : appelée à chaque coup simulé. */
   function unseen(g, seat) {
-    const known = new Set([...g.played, ...g.hands[seat]].map(id));
-    const all = [];
-    for (const s of SUITS) for (const r of RANKS) if (!known.has(r + s)) all.push({ s, r });
-    return all;
+    let known = 0;
+    for (const c of g.played) known |= bit(c);
+    for (const c of g.hands[seat]) known |= bit(c);
+    return DECK.filter((c, i) => !(known & (1 << i)));
   }
 
   /** Couleurs qu'un joueur n'a plus, déduites des plis : il n'a pas fourni ; à la couleur, s'il s'est défaussé
@@ -366,12 +369,11 @@ const E = (() => {
   }
 
   /** Carte maîtresse : aucune plus forte dehors, et (à la couleur) aucun adversaire encore à jouer ne peut la couper. */
-  function isMaster(g, seat, card, rest = []) {
+  function isMaster(g, seat, card, rest = [], out = unseen(g, seat)) {
     const t = g.contract.suit;
-    const out = unseen(g, seat).filter(c => c.s === card.s);
     const ord = isTrumpOf(card, t) ? TRUMP_ORD : PLAIN_ORD;
-    if (out.some(c => ord.indexOf(c.r) > ord.indexOf(card.r))) return false;
-    if (SUITS.includes(t) && card.s !== t && rest.length && unseen(g, seat).some(c => c.s === t)) {
+    if (out.some(c => c.s === card.s && ord.indexOf(c.r) > ord.indexOf(card.r))) return false;
+    if (SUITS.includes(t) && card.s !== t && rest.length && out.some(c => c.s === t)) {
       const v = voids(g);
       if (rest.some(s => team(s) !== team(seat) && v[s].has(card.s) && !v[s].has(t))) return false;
     }
@@ -387,10 +389,10 @@ const E = (() => {
     const pts = c => points(c, t);
     const byLow = arr => arr.slice().sort((a, b) => pts(a) - pts(b) || strength(a, t, a.s) - strength(b, t, b.s));
     const myTrumps = legal.filter(c => c.s === t);
-    const outTrumps = unseen(g, seat).filter(c => c.s === t).length;
+    const out = unseen(g, seat), outTrumps = out.filter(c => c.s === t).length;
     const rest = []; // joueurs encore à jouer après moi dans ce pli
     for (let s = next(seat), k = g.trick.length + 1; k < 4; k++, s = next(s)) rest.push(s);
-    const master = c => isMaster(g, seat, c, rest);
+    const master = c => isMaster(g, seat, c, rest, out);
 
     if (!g.trick.length) {
       if (attacker && myTrumps.length && outTrumps > 0) {
@@ -411,7 +413,7 @@ const E = (() => {
     if (team(winSeat) === team(seat)) {
       const safe = last || master(winCard);
       if (safe) {
-        const plain = legal.filter(c => c.s !== t || !isMaster(g, seat, c));
+        const plain = legal.filter(c => c.s !== t || !isMaster(g, seat, c, [], out));
         const pool = plain.length ? plain : legal;
         return pool.slice().sort((a, b) => pts(b) - pts(a))[0];
       }
@@ -434,8 +436,10 @@ const E = (() => {
   /* Jeu de la carte par simulation : l'IA ne connaît que sa main et les cartes jouées. Elle tire MC_WORLDS
    * répartitions des cartes cachées compatibles avec ce qu'elle a vu (tailles des mains, couleurs manquantes),
    * joue la fin de donne avec les règles simples pour chaque carte possible, et garde la meilleure en moyenne.
-   * Tirages reproductibles (graine tirée de la position) : une même donne donne le même jeu, en duplicate. */
-  const MC_WORLDS = 20;
+   * Tirages reproductibles (graine tirée de la position) : une même donne donne le même jeu, en duplicate.
+   * Garde-fou MC_BUDGET_MS : sur un appareil très lent, on s'arrête plus tôt (au moins MC_MIN mondes) ;
+   * un coup prend ~50 ms au pire sur ordinateur, la limite ne joue donc que sur des téléphones très lents. */
+  const MC_WORLDS = 20, MC_MIN = 4, MC_BUDGET_MS = 1500;
   function dealWorld(g, seat, r, v) {
     const pool = unseen(g, seat), need = [0, 0, 0, 0], playedBy = [0, 0, 0, 0]; // cartes restantes : 8 moins celles posées
     for (const tr of g.tricks) for (const x of tr.cards) playedBy[x.seat]++;
@@ -468,7 +472,8 @@ const E = (() => {
     const r = rng(hashStr(g.idx + ':' + seat + ':' + g.played.map(id).join('')));
     const v = voids(g), sum = legal.map(() => 0);
     let n = 0;
-    for (let k = 0; k < MC_WORLDS; k++) {
+    const end = Date.now() + MC_BUDGET_MS;
+    for (let k = 0; k < MC_WORLDS && (n < MC_MIN || Date.now() < end); k++) {
       const hands = dealWorld(g, seat, r, v);
       if (!hands) continue;
       legal.forEach((c, i) => { sum[i] += rollout(g, seat, c, hands); });
