@@ -43,10 +43,13 @@ Sans `config.js` rempli, le jeu fonctionne hors ligne (parties sur le téléphon
 | `firestore.rules` | Règles d'accès Firestore |
 | `test/engine.test.js` | Tests du moteur (donnes complètes, score, coinche/surcoinche, duplicate) |
 | `test/profile.test.js` | Tests des profils (fiches écrites en fin de donne, stats, classements, hall of fame) |
+| `test/ui.multi.test.js` | Tests d'interface : la vraie page jouée par plusieurs téléphones simulés (table libre en ligne, passe-et-joue hors ligne, tournoi 2 tables) sur un faux Firebase (`test/support/fakefb.js`) |
 | `tools/bench.js` | Banc d'essai de l'IA : statistiques d'enchères, duplicate contre une autre version, recalibrage du modèle d'annonce |
 
 ## Tests
 Aucune dépendance, Node 18 ou plus : `npm test` (ou `node --test`).
+
+Les tests d'interface ont besoin de jsdom, qui n'est pas installé par défaut (ils sont alors ignorés) : `npm i --no-save jsdom@24` puis `npm test`. Compter deux à trois minutes.
 
 Niveau de l'IA : `npm run bench`. Pour comparer à la version en ligne : `git show main:engine.js > /tmp/ancien.js` puis `npm run bench -- --vs /tmp/ancien.js` (écart moyen par donne en duplicate, camps inversés sur chaque donne, avec sa marge d'erreur). Compter quelques minutes pour 1 000 donnes : l'IA simule la fin de donne avant chaque carte.
 
