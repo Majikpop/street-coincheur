@@ -12,14 +12,14 @@ const T = (() => {
   function initTour(tour, table) {
     return {
       kind: 'tour', tid: tour.id, table,
-      tour: { id: tour.id, name: tour.name, tables: tour.tables, perSet: tour.perSet, ...(tour.belote === false ? { belote: false } : {}), ...(tour.speed ? { speed: tour.speed } : {}), ...(tour.seed ? { seed: tour.seed } : {}) },
+      tour: { id: tour.id, name: tour.name, tables: tour.tables, perSet: tour.perSet, ...(tour.belote === false ? { belote: false } : {}), ...(tour.strict ? { strict: true } : {}), ...(tour.speed ? { speed: tour.speed } : {}), ...(tour.seed ? { seed: tour.seed } : {}) },
       seats: [EMPTY(), EMPTY(), EMPTY(), EMPTY()],
       round: 0, doneDeals: [], status: 'lobby', game: null, rev: 0, at: 0,
     };
   }
   function initFree(code, opts = {}) {
     return {
-      kind: 'free', code, n: 0, scores: [0, 0], target: opts.target || 1000, moc: !!opts.moc, belote: opts.belote !== false, speed: opts.speed || 'normal',
+      kind: 'free', code, n: 0, scores: [0, 0], target: opts.target || 1000, moc: !!opts.moc, belote: opts.belote !== false, strict: !!opts.strict, speed: opts.speed || 'normal',
       seats: [EMPTY(), EMPTY(), EMPTY(), EMPTY()],
       status: 'lobby', game: null, rev: 0, at: 0,
     };
@@ -77,7 +77,7 @@ const T = (() => {
     let g, writes = [];
     if (d.kind === 'free') {
       if (Math.max(...d.scores) >= d.target) d.scores = [0, 0];
-      g = E.newGame(E.makeDeal(Math.random().toString(36).slice(2) + Date.now().toString(36), d.n), { moc: d.moc, belote: d.belote });
+      g = E.newGame(E.makeDeal(Math.random().toString(36).slice(2) + Date.now().toString(36), d.n), { moc: d.moc, belote: d.belote, strict: d.strict });
       writes = g.initialHands.map((h, s) => ({ path: handPath(`rooms/${d.code}`, g.idx, s), data: { cards: h } }));
       d.n++;
     } else {
@@ -85,9 +85,9 @@ const T = (() => {
       if (!nx) { d.status = 'finished'; d.game = null; return []; }
       d.round = nx.round;
       if (d.tour.seed) { // tournoi créé avant les mains privées : donnes tirées de la graine publique
-        d.game = JSON.stringify(E.newGame(E.makeDeal(d.tour.seed, nx.idx), { belote: d.tour.belote })); d.hk = null; d.status = 'playing'; return [];
+        d.game = JSON.stringify(E.newGame(E.makeDeal(d.tour.seed, nx.idx), { belote: d.tour.belote, strict: d.tour.strict })); d.hk = null; d.status = 'playing'; return [];
       }
-      g = E.newGame({ idx: nx.idx, dealer: nx.idx % 4, hands: [[], [], [], []] }, { belote: d.tour.belote }); // mains écrites à la création du tournoi
+      g = E.newGame({ idx: nx.idx, dealer: nx.idx % 4, hands: [[], [], [], []] }, { belote: d.tour.belote, strict: d.tour.strict }); // mains écrites à la création du tournoi
     }
     delete g.initialHands;
     d.game = pack(g); d.hk = String(g.idx);

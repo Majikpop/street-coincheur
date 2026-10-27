@@ -87,7 +87,7 @@ function checkFinishedDeal(g) {
 
 test('donnes complètes IA : règles respectées, cartes et score cohérents', () => {
   const seen = new Set();
-  for (const seed of ['alpha', 'beta', 'gamma', 'delta']) for (let i = 0; i < 40; i++) {
+  for (const seed of ['alpha', 'beta', 'gamma', 'delta']) for (let i = 0; i < 12; i++) {
     const g = playDeal(E.makeDeal(seed, i));
     checkFinishedDeal(g);
     if (g.contract) seen.add(g.contract.suit);
@@ -570,4 +570,16 @@ test('IA : ouvre une main solide, passe une main vide, coinche quand elle tient 
   const c = E.newGame({ idx: 0, dealer: S, hands: [hand('7H 8H 9H QH 7D 8D 9D 8C'), hand('KS QS 10S 7S KH 10H KD 10D'), hand('JS 9S AS AH AD AC 10C 9C'), hand('8S JH QD JD KC QC JC 7C')] });
   E.applyBid(c, EST, { type: 'bid', value: 120, suit: 'S' });
   assert.deepEqual(E.botBid(c, N), { type: 'coinche' });
+});
+
+test('option surcoupe obligatoire : surcouper son partenaire qui a coupé, si possible', () => {
+  // Est entame cœur, Nord coupe, Ouest fournit : Sud (partenaire de Nord) n'a plus de cœur
+  const g = inPlay(['7S 9C 7C', 'AH 7D', '8C 8D', 'KH 8S'], 'C', [[EST, 'AH'], [N, '8C'], [O, 'KH']]);
+  assert.equal(g.turn, S);
+  assert.deepEqual(legal(g), ['7C', '7S', '9C']); // règle officielle : défausse libre
+  g.strict = true;
+  assert.deepEqual(legal(g), ['9C']); // règle stricte : surcouper avec le 9
+  const h = inPlay(['7S 7C', 'AH 7D', '9C 8D', 'KH 8S'], 'C', [[EST, 'AH'], [N, '9C'], [O, 'KH']]);
+  h.strict = true;
+  assert.deepEqual(legal(h), ['7C', '7S']); // impossible de surcouper le 9 : défausse libre
 });

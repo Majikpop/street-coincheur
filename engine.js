@@ -84,7 +84,7 @@ const E = (() => {
       idx: deal.idx, dealer: deal.dealer, hands: deal.hands.map(h => h.slice()), initialHands: deal.hands.map(h => h.slice()),
       phase: 'bid', turn: first, bids: [], contract: null, passes: 0, surQueue: null,
       trick: [], leader: first, tricks: [], played: [], beloteSeat: null, beloteSaid: 0, result: null, moc: !!opts.moc,
-      ...(opts.belote === false ? { noBelote: true } : {}),
+      ...(opts.belote === false ? { noBelote: true } : {}), ...(opts.strict ? { strict: true } : {}),
     };
   }
 
@@ -168,7 +168,9 @@ const E = (() => {
     }
     if (follow.length) return follow;
     if (!myTrumps.length) return hand.slice();
-    if (partnerMaster) return hand.slice(); // partenaire maître : défausse libre, pas d'obligation de couper ni de surcouper
+    // partenaire maître : défausse libre, pas d'obligation de couper ni de surcouper ;
+    // règle stricte (option) : s'il a coupé, on doit surcouper si on peut
+    if (partnerMaster) return g.strict && bestT >= 0 && higher.length ? higher : hand.slice();
     return higher.length ? higher : myTrumps; // couper / surcouper, sinon sous-couper
   }
 
@@ -242,17 +244,38 @@ const E = (() => {
     return { est, n: tr.length, J: tr.some(c => c.r === 'J'), nine: tr.some(c => c.r === '9') };
   }
 
-  /* Modèle d'annonce calibré par simulation (npm run bench -- --calib) : avec l'IA à la carte, le preneur fait
-   * environ 38 + 0,855 × évaluation points (belote comprise), à un écart près tiré de ces 20 quantiles. */
-  const RESID = [-53, -41, -34, -29, -24, -20, -16, -12, -8, -4, -1, 3, 7, 11, 16, 21, 27, 34, 44, 64];
-  /** Écart moyen attendu (preneur − défense) pour un contrat v joué avec une main évaluée à est. */
-  function contractEV(est, v, m = 1) {
+  /* Modèle d'annonce calibré par simulation (npm run bench -- --calib) : points faits par le preneur avec l'IA
+   * à la carte, selon sa seule main, à un écart près tiré de 20 quantiles (RESID).
+   * Couleur : 38 + 0,855 × évaluation (belote comprise). Tout atout et sans atout : somme pondérée des
+   * caractéristiques de handFeats (constante, puis une par caractéristique). */
+  const MODEL = {
+    suit: { resid: [-53, -41, -34, -29, -24, -20, -16, -12, -8, -4, -1, 3, 7, 11, 16, 21, 27, 34, 44, 64] },
+    AT: { w: [58.9, 13.9, 6.3, 2.0, 0.5, 5.0, -5.5], resid: [-53, -37, -30, -24, -20, -16, -13, -9, -6, -3, 0, 3, 6, 10, 13, 18, 22, 28, 37, 54] },
+    NT: { w: [50.8, 16.2, 7.5, 1.4, 1.6, -6.3, 2.0], resid: [-52, -37, -29, -24, -20, -16, -12, -10, -7, -3, 0, 3, 6, 10, 13, 17, 22, 28, 37, 55] },
+  };
+  /** Caractéristiques d'une main pour le tout atout (valets, 9, as, 10, valet-9 ensemble, 9 sec)
+   *  ou le sans atout (as, 10, rois, as-10 ensemble, 10 sec, plus longue couleur). */
+  function handFeats(h, t) {
+    const has = (r, s) => h.some(c => c.r === r && c.s === s), len = s => h.filter(c => c.s === s).length;
+    const cnt = r => SUITS.filter(s => has(r, s)).length, both = (a, b) => SUITS.filter(s => has(a, s) && has(b, s)).length;
+    const sec = (r, guard) => SUITS.filter(s => has(r, s) && !has(guard, s) && len(s) === 1).length;
+    if (t === 'AT') return [1, cnt('J'), cnt('9'), cnt('A'), cnt('10'), both('J', '9'), sec('9', 'J')];
+    return [1, cnt('A'), cnt('10'), cnt('K'), both('A', '10'), sec('10', 'A'), Math.max(...SUITS.map(len))];
+  }
+  /** Points attendus du preneur (belote comprise à la couleur) pour un contrat t joué avec cette main. */
+  function expectedPts(hand, t, noBelote) {
+    if (SUITS.includes(t)) return 38 + 0.855 * evalSuit(hand, t, noBelote).est;
+    return handFeats(hand, t).reduce((a, x, i) => a + x * MODEL[t].w[i], 0);
+  }
+  /** Écart moyen attendu (preneur − défense) pour un contrat v à t, avec mu points attendus, coinche m. */
+  function contractEV(mu, v, t = 'S', m = 1) {
+    const resid = (MODEL[t] || MODEL.suit).resid;
     let ev = 0;
-    for (const r of RESID) {
-      const T = Math.max(0, Math.min(182, 38 + 0.855 * est + r));
+    for (const r of resid) {
+      const T = Math.max(0, Math.min(SUITS.includes(t) ? 182 : 162, mu + r));
       ev += T >= v && T >= 82 ? (m === 1 ? v + 2 * T - 162 : 160 + v * m) : -(160 + v * m);
     }
-    return ev / RESID.length;
+    return ev / resid.length;
   }
 
   /* Coinche : probabilité que le contrat adverse chute, vue de la main du défenseur (régression logistique
@@ -270,11 +293,11 @@ const E = (() => {
     if (d.type !== 'pass' || opts.pass) return d;
     // MOC : monter d'un cran (toujours face à son partenaire) ou coincher, selon ce qui coûte le moins
     const cur = g.contract, v = opts.values[0], hand = g.hands[seat];
-    const ranked = SUITS.map(s => ({ s, e: evalSuit(hand, s, g.noBelote) })).sort((a, b) => b.e.est - a.e.est)[0];
+    const ranked = CONTRACTS.map(s => ({ s, mu: expectedPts(hand, s, g.noBelote) })).sort((a, b) => b.mu - a.mu)[0];
     const withPartner = cur && cur.seat === partner(seat);
     if (v !== undefined && (!opts.coinche || withPartner)) return { type: 'bid', value: v, suit: withPartner ? cur.suit : ranked.s };
     if (v === undefined) return { type: 'coinche' };
-    const bidEV = contractEV(ranked.e.est, v);
+    const bidEV = contractEV(ranked.mu, v, ranked.s);
     const p = SUITS.includes(cur.suit) ? pFail(hand, cur) : 0.3, coEV = (2 * p - 1) * (160 + 2 * cur.value);
     return bidEV > coEV ? { type: 'bid', value: v, suit: ranked.s } : { type: 'coinche' };
   }
@@ -284,8 +307,8 @@ const E = (() => {
     const hand = g.hands[seat], cur = g.contract;
     if (g.surQueue) { // surcoincher si la main tient encore malgré la coinche (qui annonce du jeu en face)
       if (cur.seat !== seat || !SUITS.includes(cur.suit)) return { type: 'pass' };
-      const est = evalSuit(hand, cur.suit, g.noBelote).est - 15;
-      return contractEV(est, cur.value, 4) > contractEV(est, cur.value, 2) + TUNE.sur ? { type: 'surcoinche' } : { type: 'pass' };
+      const mu = expectedPts(hand, cur.suit, g.noBelote) - 13;
+      return contractEV(mu, cur.value, cur.suit, 4) > contractEV(mu, cur.value, cur.suit, 2) + TUNE.sur ? { type: 'surcoinche' } : { type: 'pass' };
     }
     const myPrev = g.bids.filter(b => b.seat === seat && b.type === 'bid').length;
     // soutien du partenaire
@@ -301,26 +324,20 @@ const E = (() => {
     if (cur && cur.seat === partner(seat)) return { type: 'pass' };
     // coinche défensive
     if (opts.coinche && SUITS.includes(cur.suit) && coincheEV(hand, cur) > TUNE.coinche) return { type: 'coinche' };
-    // Annonce à la couleur : la plus rentable d'après le modèle, si elle vaut mieux que passer
+    // Annonce (couleur, tout atout ou sans atout) : la plus rentable d'après le modèle, si elle vaut mieux que passer
     // (0 sans contrat ; face à un contrat adverse, ce que rapporte en moyenne de le laisser jouer).
     const alt = cur ? -(TUNE.pOpp * (cur.value + 40) - (1 - TUNE.pOpp) * (160 + cur.value)) : 0;
     let best = null;
-    for (const s of SUITS) {
-      const e = evalSuit(hand, s, g.noBelote);
-      if (e.n < 2 || !(e.J || e.nine)) continue;
+    for (const t of CONTRACTS) {
+      if (SUITS.includes(t)) { const e = evalSuit(hand, t); if (e.n < 2 || !(e.J || e.nine)) continue; }
+      const mu = expectedPts(hand, t, g.noBelote);
       for (const v of opts.values) {
         if (v > 160) break;
-        const ev = contractEV(e.est, v);
-        if (ev > alt + TUNE.margin && (!best || ev > best.ev)) best = { value: v, suit: s, ev };
+        const ev = contractEV(mu, v, t);
+        if (ev > alt + TUNE.margin && (!best || ev > best.ev)) best = { value: v, suit: t, ev };
       }
     }
     if (best) delete best.ev;
-    // Tout atout : beaucoup de valets et de 9 ; sans atout : as et 10 secs dans plusieurs couleurs
-    const has = (r, s) => hand.some(c => c.r === r && c.s === s);
-    const J = SUITS.filter(s => has('J', s)).length, N = SUITS.filter(s => has('9', s)).length;
-    const A = SUITS.filter(s => has('A', s)).length, A10 = SUITS.filter(s => has('A', s) && has('10', s)).length;
-    if ((J >= 3 && N >= 2) || J === 4) { const v = Math.min(140, 80 + (J + N - 5) * 10); if (!best || v > best.value) best = { value: Math.max(80, v), suit: 'AT' }; }
-    if (A >= 3 && A10 >= 2) { const v = Math.min(140, 80 + (A + A10 - 4) * 10); if (!best || v > best.value) best = { value: Math.max(80, v), suit: 'NT' }; }
     if (best && opts.values.includes(best.value) && myPrev < 2) return { type: 'bid', ...best };
     return { type: 'pass' };
   }
@@ -332,19 +349,37 @@ const E = (() => {
     return all;
   }
 
-  function isMaster(g, seat, card) {
+  /** Couleurs qu'un joueur n'a plus, déduites des plis : il n'a pas fourni ; à la couleur, s'il s'est défaussé
+   *  alors que l'adversaire était maître, il n'a plus d'atout non plus (sinon il aurait dû couper). */
+  function voids(g) {
+    const t = g.contract.suit, v = [0, 1, 2, 3].map(() => new Set());
+    for (const cards of [...g.tricks.map(x => x.cards), g.trick]) {
+      if (!cards.length) continue;
+      const led = cards[0].card.s;
+      cards.forEach((x, i) => {
+        if (i === 0 || x.card.s === led) return;
+        v[x.seat].add(led);
+        if (SUITS.includes(t) && x.card.s !== t && team(trickWinner(cards.slice(0, i), t)) !== team(x.seat)) v[x.seat].add(t);
+      });
+    }
+    return v;
+  }
+
+  /** Carte maîtresse : aucune plus forte dehors, et (à la couleur) aucun adversaire encore à jouer ne peut la couper. */
+  function isMaster(g, seat, card, rest = []) {
     const t = g.contract.suit;
     const out = unseen(g, seat).filter(c => c.s === card.s);
     const ord = isTrumpOf(card, t) ? TRUMP_ORD : PLAIN_ORD;
     if (out.some(c => ord.indexOf(c.r) > ord.indexOf(card.r))) return false;
-    if (card.s !== t) {
-      // une coupe adverse reste possible si des atouts traînent
-      return true;
+    if (SUITS.includes(t) && card.s !== t && rest.length && unseen(g, seat).some(c => c.s === t)) {
+      const v = voids(g);
+      if (rest.some(s => team(s) !== team(seat) && v[s].has(card.s) && !v[s].has(t))) return false;
     }
     return true;
   }
 
-  function botPlay(g, seat) {
+  /** Jeu de la carte par règles simples : sert aux simulations de botPlay. */
+  function playHeuristic(g, seat) {
     const legal = legalCards(g, seat);
     if (legal.length === 1) return legal[0];
     const t = g.contract.suit;
@@ -353,14 +388,17 @@ const E = (() => {
     const byLow = arr => arr.slice().sort((a, b) => pts(a) - pts(b) || strength(a, t, a.s) - strength(b, t, b.s));
     const myTrumps = legal.filter(c => c.s === t);
     const outTrumps = unseen(g, seat).filter(c => c.s === t).length;
+    const rest = []; // joueurs encore à jouer après moi dans ce pli
+    for (let s = next(seat), k = g.trick.length + 1; k < 4; k++, s = next(s)) rest.push(s);
+    const master = c => isMaster(g, seat, c, rest);
 
     if (!g.trick.length) {
       if (attacker && myTrumps.length && outTrumps > 0) {
-        const master = myTrumps.find(c => isMaster(g, seat, c));
-        if (master) return master;
+        const topT = myTrumps.find(master);
+        if (topT) return topT;
         if (seat === g.contract.seat && myTrumps.length >= 3) return byLow(myTrumps)[0];
       }
-      const aces = legal.filter(c => c.s !== t && isMaster(g, seat, c));
+      const aces = legal.filter(c => c.s !== t && master(c));
       if (aces.length) return aces.sort((a, b) => pts(b) - pts(a))[0];
       const plain = legal.filter(c => c.s !== t);
       return byLow(plain.length ? plain : legal)[0];
@@ -371,7 +409,7 @@ const E = (() => {
     const winCard = g.trick.find(x => x.seat === winSeat).card;
     const last = g.trick.length === 3;
     if (team(winSeat) === team(seat)) {
-      const safe = last || isMaster(g, seat, winCard);
+      const safe = last || master(winCard);
       if (safe) {
         const plain = legal.filter(c => c.s !== t || !isMaster(g, seat, c));
         const pool = plain.length ? plain : legal;
@@ -384,13 +422,63 @@ const E = (() => {
     if (beats.length) {
       const sorted = beats.slice().sort((a, b) => strength(a, t, led) - strength(b, t, led));
       if (last) return sorted[0];
-      const master = sorted.find(c => isMaster(g, seat, c));
+      const top = sorted.find(master);
       const trickPts = g.trick.reduce((a, x) => a + pts(x.card), 0);
-      if (master && (master.s !== t || trickPts >= 10)) return master;
+      if (top && (top.s !== t || trickPts >= 10)) return top;
       if (sorted[0].s === t && trickPts >= 10) return sorted[0];
     }
     const nonT = legal.filter(c => c.s !== t);
     return byLow(nonT.length ? nonT : legal)[0];
+  }
+
+  /* Jeu de la carte par simulation : l'IA ne connaît que sa main et les cartes jouées. Elle tire MC_WORLDS
+   * répartitions des cartes cachées compatibles avec ce qu'elle a vu (tailles des mains, couleurs manquantes),
+   * joue la fin de donne avec les règles simples pour chaque carte possible, et garde la meilleure en moyenne.
+   * Tirages reproductibles (graine tirée de la position) : une même donne donne le même jeu, en duplicate. */
+  const MC_WORLDS = 20;
+  function dealWorld(g, seat, r, v) {
+    const pool = unseen(g, seat), need = [0, 0, 0, 0], playedBy = [0, 0, 0, 0]; // cartes restantes : 8 moins celles posées
+    for (const tr of g.tricks) for (const x of tr.cards) playedBy[x.seat]++;
+    for (const x of g.trick) playedBy[x.seat]++;
+    for (let s = 0; s < 4; s++) need[s] = s === seat ? 0 : 8 - playedBy[s];
+    for (let tries = 0; tries < 20; tries++) {
+      const left = need.slice(), hands = [[], [], [], []];
+      const cards = pool.map(c => ({ c, ok: [0, 1, 2, 3].filter(s => s !== seat && !(tries < 15 && v[s].has(c.s))), k: r() }))
+        .sort((a, b) => a.ok.length - b.ok.length || a.k - b.k);
+      let fail = false;
+      for (const { c, ok } of cards) {
+        const cand = ok.filter(s => left[s] > 0);
+        if (!cand.length) { fail = true; break; }
+        const s = cand[Math.floor(r() * cand.length)];
+        hands[s].push(c); left[s]--;
+      }
+      if (!fail) { hands[seat] = g.hands[seat].slice(); return hands; }
+    }
+    return null;
+  }
+  function rollout(g, seat, card, hands) {
+    const w = { ...g, hands: hands.map(h => h.slice()), trick: g.trick.slice(), tricks: g.tricks.slice(), played: g.played.slice(), result: null };
+    playCard(w, seat, card);
+    while (w.phase === 'play') playCard(w, w.turn, playHeuristic(w, w.turn));
+    return (team(seat) === 0 ? 1 : -1) * (w.result.ns - w.result.ew);
+  }
+  function botPlay(g, seat) {
+    const legal = legalCards(g, seat);
+    if (legal.length === 1 || g.tricks.length >= 7) return legal.length === 1 ? legal[0] : playHeuristic(g, seat);
+    const r = rng(hashStr(g.idx + ':' + seat + ':' + g.played.map(id).join('')));
+    const v = voids(g), sum = legal.map(() => 0);
+    let n = 0;
+    for (let k = 0; k < MC_WORLDS; k++) {
+      const hands = dealWorld(g, seat, r, v);
+      if (!hands) continue;
+      legal.forEach((c, i) => { sum[i] += rollout(g, seat, c, hands); });
+      n++;
+    }
+    if (!n) return playHeuristic(g, seat);
+    const h = playHeuristic(g, seat);
+    let best = legal.findIndex(c => sameCard(c, h)); // à égalité, la carte des règles simples
+    legal.forEach((c, i) => { if (sum[i] > sum[best] + 1e-9) best = i; });
+    return legal[best];
   }
 
   // ===== Duplicate =====
@@ -436,7 +524,7 @@ const E = (() => {
   return {
     SUITS, CONTRACTS, SYM, SUIT_NAME, RANK_FR, SEATS, SEAT_NAME, BID_VALUES, team, partner, next,
     hashStr, makeDeal, newGame, legalBidOptions, canCoinche, applyBid, legalCards, playCard, trickWinner, points, sortHand, sameCard,
-    scoreDeal, evalSuit, TUNE, botBid, botPlay, setForTable, dealsOfSet, matchpoints, standings,
+    scoreDeal, evalSuit, handFeats, expectedPts, TUNE, botBid, botPlay, playHeuristic, setForTable, dealsOfSet, matchpoints, standings,
   };
 })();
 if (typeof module !== 'undefined') module.exports = E;
