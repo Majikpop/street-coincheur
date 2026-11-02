@@ -340,6 +340,7 @@ const back = (label, hash) => `<button class="btn ghost back" data-a="go" data-h
 function netNote() {
   if (S.net === 'connecting') return `<p class="mode"><span class="dot"></span>Connexion au serveur…</p>`;
   if (S.net === 'online') return `<p class="mode"><span class="dot on"></span><span>En ligne : chaque joueur rejoint la table depuis son téléphone avec le lien.</span></p>`;
+  if (S.offline) return `<p class="mode"><span class="dot"></span><span>Hors ligne : partie libre et tournois sur ce téléphone, contre l'IA ou en passe-et-joue. Le jeu en réseau revient avec la connexion.</span></p>`;
   return `<p class="mode"><span class="dot"></span><span>Hors ligne : les parties restent sur ce téléphone. Le jeu en réseau s'active une fois le serveur configuré.</span></p>`;
 }
 function nameField(id) {
@@ -1145,15 +1146,27 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 window.addEventListener('pageshow', e => { if (e.persisted) checkVersion(); });
 setInterval(checkVersion, 10 * 60000);
 
+/* ---------- Jeu sans réseau ----------
+   Le service worker (sw.js) garde la page, les scripts et les polices sur le téléphone : une fois ouvert en ligne,
+   le jeu se relance sans connexion, en mode hors ligne. Au retour du réseau, on repasse en ligne hors partie. */
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost') && !window.SC_NO_SW) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {}));
+}
+window.addEventListener('online', () => {
+  if (S.offline && !document.body.classList.contains('in-game')) location.reload();
+});
+
 /* ---------- Démarrage ---------- */
 (async function boot() {
   document.body.classList.toggle('c4', S.colors4);
   LOCAL = makeLocal();
   render();
   const cfg = window.SC_FIREBASE_CONFIG;
-  if (cfg && cfg.apiKey && !/COLLER/.test(cfg.apiKey)) {
-    try { NET = await makeOnline(cfg); S.net = 'online'; }
-    catch (e) { NET = LOCAL; S.net = 'local'; S.err = 'Serveur injoignable (' + (e.code || e.message) + '). Mode hors ligne.'; }
+  if (cfg && cfg.apiKey && !/COLLER/.test(cfg.apiKey) && navigator.onLine === false) { NET = LOCAL; S.net = 'local'; S.offline = true; }
+  else if (cfg && cfg.apiKey && !/COLLER/.test(cfg.apiKey)) {
+    // Plafond de 12 s : sur un réseau qui ne répond pas, on joue plutôt que d'attendre.
+    try { NET = await Promise.race([makeOnline(cfg), new Promise((_, rej) => setTimeout(() => rej(new Error('délai dépassé')), 12000))]); S.net = 'online'; }
+    catch (e) { NET = LOCAL; S.net = 'local'; S.offline = true; S.err = 'Serveur injoignable (' + (e.code || e.message) + '). Mode hors ligne.'; }
   } else { NET = LOCAL; S.net = 'local'; }
   if (NET.mode === 'online') subs.rooms = NET.watchCol('rooms', rs => { S.rooms = rs.filter(r => r.seats).sort((a, b) => roomActivity(b) - roomActivity(a)); if (S.view === 'home') render(); });
   subs.tours = NET.watchCol('tournaments', ts => { S.tours = ts.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); render(); });

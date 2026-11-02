@@ -32,6 +32,10 @@ Le jeu est alors en ligne sur `https://majikpop.github.io/street-coincheur/` (un
 
 Sans `config.js` rempli, le jeu fonctionne hors ligne (parties sur le téléphone uniquement).
 
+### Jouer sans réseau
+Une fois le site ouvert **une fois en ligne** (idéalement ajouté à l'écran d'accueil), il se relance sans connexion : partie libre et tournois sur le téléphone, contre l'IA ou en passe-et-joue. Tables en ligne, profils et hall of fame reviennent avec le réseau (rechargement automatique hors partie).
+À chaque publication, changer le numéro `?v=` de `index.html` comme d'habitude : le service worker sert alors la nouvelle version et efface l'ancienne.
+
 ## Fichiers
 | Fichier | Rôle |
 |---|---|
@@ -40,6 +44,7 @@ Sans `config.js` rempli, le jeu fonctionne hors ligne (parties sur le téléphon
 | `profile.js` | Profils : fiches de donne, stats, classements de tournoi, titres, hall of fame |
 | `app.js` | Interface, connexion Firebase, mode hors ligne |
 | `config.js` | Configuration Firebase du projet |
+| `sw.js` | Service worker : garde la page, les scripts et les polices sur le téléphone pour jouer sans réseau |
 | `firestore.rules` | Règles d'accès Firestore |
 | `test/engine.test.js` | Tests du moteur (donnes complètes, score, coinche/surcoinche, duplicate) |
 | `test/profile.test.js` | Tests des profils (fiches écrites en fin de donne, stats, classements, hall of fame) |
